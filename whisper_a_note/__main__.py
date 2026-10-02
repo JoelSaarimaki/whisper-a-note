@@ -28,7 +28,8 @@ def main() -> None:
         models.download(models.DEFAULT_MODEL, paths.whisper_models_dir())
         print("Done.")
         return
-    print("Whisper A Note: the user interface is not implemented yet.")
+    from .ui.app import run
+    sys.exit(run())
 
 
 if __name__ == "__main__":

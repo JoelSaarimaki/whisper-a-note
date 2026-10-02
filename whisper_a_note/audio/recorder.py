@@ -140,6 +140,10 @@ class Recorder:
         """Set if recording stopped by itself (e.g. disk full)."""
         return next((t.error for t in self._tracks.values() if t.error), None)
 
+    @property
+    def muted_all(self) -> bool:
+        return self._mute["all"]
+
     def is_muted(self, kind: str) -> bool:
         return self._mute["all"] or self._mute[kind]
 

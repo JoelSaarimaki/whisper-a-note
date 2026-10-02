@@ -272,6 +272,14 @@ pygments==2.21.0
     # via rich
 pyparsing==3.3.3
     # via matplotlib
+pyside6==6.11.2
+    # via whisper-a-note
+pyside6-addons==6.11.2
+    # via pyside6
+pyside6-essentials==6.11.2
+    # via
+    #   pyside6
+    #   pyside6-addons
 python-dateutil==2.9.0.post0
     # via
     #   matplotlib
@@ -309,6 +317,11 @@ scipy==1.18.1 ; python_full_version >= '3.12'
     #   scikit-learn
 setuptools==84.0.0
     # via torch
+shiboken6==6.11.2
+    # via
+    #   pyside6
+    #   pyside6-addons
+    #   pyside6-essentials
 six==1.17.0
     # via python-dateutil
 sortedcontainers==2.4.0
