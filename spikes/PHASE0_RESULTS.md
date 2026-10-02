@@ -81,7 +81,7 @@ Library: `soundcard` 0.4.6 (WASAPI loopback of the default output device; also s
 - **Silence on the system side keeps the tracks aligned.** While nothing plays, loopback delivers digital silence instead of stalling, so both tracks stay the same length.
 - **No drift measured:** in a 5-minute recording, both tracks came out at 299.9 s. Both started about 0.25 s after the wall clock, which is startup latency, the same for both.
 - **CPU use:** 10% of one core over 5 minutes (target < 10%, NFR-04). This is unoptimised spike code; larger blocks and writing straight to WAV should lower it.
-- *Pending:* a test with real speech and a video, judged by ear.
+- *Deferred:* a by-ear test with real speech and a video. It will be done with the first real recording in the MVP. The automatic checks above already confirm capture works; this only checks sound quality (levels, mix balance), which can be adjusted without design changes.
 
 ## Clean install with plain pip (Windows)
 

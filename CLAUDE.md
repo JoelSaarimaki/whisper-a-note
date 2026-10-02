@@ -16,7 +16,7 @@ Context for Claude Code sessions working on this project.
 - Project skeleton exists (`pyproject.toml`, uv, `whisper_a_note/`); spikes in `spikes/`, results in `spikes/PHASE0_RESULTS.md`. Test models and recordings are gitignored (`spikes/models/`, `spikes/test_audio/`, `audio_test_files_finnish/`).
 - **Phase 0 spikes** (SPEC §10):
   1. macOS system audio via Core Audio process taps (Swift helper streaming PCM to Python); clock drift between tracks is only a quick, minor check.
-  2. **Done on Windows:** pipeline works offline; `large-v3-turbo` default, context as `hotwords` only (no previous-text conditioning), pyannote community-1, audio passed to pyannote in memory. Windows capture (`soundcard`, mic + loopback) and a clean pip install also work; pending: a by-ear test with real speech.
+  2. **Done on Windows:** pipeline works offline; `large-v3-turbo` default, context as `hotwords` only (no previous-text conditioning), pyannote community-1, audio passed to pyannote in memory. Windows capture (`soundcard`, mic + loopback) and a clean pip install also work; by-ear test of real speech deferred to the first MVP recording.
   3. Clean `pip install -r requirements.txt` on Windows, macOS and Linux.
 - Then: project skeleton (`pyproject.toml`, uv, package layout following PKG-1–9), then the MVP (all P1 requirements).
 
