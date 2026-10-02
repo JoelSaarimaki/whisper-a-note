@@ -10,16 +10,23 @@ Context for Claude Code sessions working on this project.
 
 - `SPEC.md` — **the source of truth.** Requirements with IDs (`REC-04`, `NOTE-05b`, …), priorities (P1 = MVP, P2, P3), architecture, data model, distribution, and a decision log (§11). Keep it up to date when decisions change; add new questions to §11.
 
-## Status
+## Status (end of session, 2026-10-02)
 
-- Spec at Draft v0.7 (2026-10-02). All open questions resolved.
-- **MVP in progress (Windows works end to end):** `whisper_a_note/` has `storage/` (JSON files, notes, metadata), `audio/` (recorder, finalize/recovery), `transcription/` (chunked Whisper + pyannote worker processes, job state machine), `export.py`, and `ui/` (PySide6: setup dialog, Recording mode, Review mode with timeline, settings). Tests in `tests/` (`uv run pytest`; `RUN_SLOW=1` for the end-to-end job test). Not done yet: macOS/Linux spikes, P2/P3 features, by-ear capture check, a real-world test by the user.
-- Spikes in `spikes/`, results in `spikes/PHASE0_RESULTS.md`. Test models and recordings are gitignored (`spikes/models/`, `spikes/test_audio/`, `audio_test_files_finnish/`).
-- **Phase 0 spikes** (SPEC §10):
-  1. macOS system audio via Core Audio process taps (Swift helper streaming PCM to Python); clock drift between tracks is only a quick, minor check.
-  2. **Done on Windows:** pipeline works offline; `large-v3-turbo` default, context as `hotwords` only (no previous-text conditioning), pyannote community-1, audio passed to pyannote in memory. Windows capture (`soundcard`, mic + loopback) and a clean pip install also work; by-ear test of real speech deferred to the first MVP recording.
-  3. Clean `pip install -r requirements.txt` on Windows, macOS and Linux.
-- Then: project skeleton (`pyproject.toml`, uv, package layout following PKG-1–9), then the MVP (all P1 requirements).
+- Spec at Draft v0.7. All open questions resolved.
+- **Phase 0 done on Windows** (results in `spikes/PHASE0_RESULTS.md`): `large-v3-turbo` default, context as `hotwords` only (no previous-text conditioning), pyannote community-1 bundled in the package, pyannote in its own process with in-memory audio, `soundcard` for mic + WASAPI loopback, clean pip install works.
+- **MVP implemented and working on Windows** (all automated tests pass; a Finnish test meeting was transcribed through the app's own job code):
+  - `whisper_a_note/storage/` JSON files, notes, metadata · `audio/` recorder, finalize, crash recovery · `transcription/` chunked Whisper + pyannote worker processes, job state machine · `export.py` · `ui/` PySide6 (setup dialog, Recording mode, Review mode with timeline, settings, controller in `app.py`).
+  - Run for development: `uv run python -m whisper_a_note`. Users: `setup.bat`/`run.bat` (`setup.sh`/`run.sh`). Do not run `setup.bat` in the dev checkout (it would replace uv's `.venv`).
+  - Tests: `uv run pytest`; `RUN_SLOW=1` adds the end-to-end transcription test. UI smoke tests run offscreen with fake audio sources (`tests/test_ui_smoke.py`). For screenshots offscreen, set `QT_QPA_FONTDIR=C:\Windows\Fonts`.
+- Gitignored local data: `spikes/models/`, `spikes/test_audio/`, `spikes/results/`, `audio_test_files_finnish/` (real meeting with colleagues' voices; never commit). The Whisper model is in the app's user data folder (`%LOCALAPPDATA%\Whisper A Note\models`).
+
+## Next steps
+
+1. **Wait for the user's first real recording with the app** and fix what they report. This also covers the deferred by-ear capture check (levels, mix balance, 16 kHz playback).
+2. P1 gap: REC-19 system-sleep marker is not implemented (recording just continues after wake-up).
+3. P2 features not built yet: audio import (REC-09), speaker renaming (TRN-08), dragging notes on the timeline (NOTE-10) and batch shift UI (NOTE-13, storage already supports it), mixed-language mode (CTX-04), expected speaker count (CTX-05), replay/loop and playback speed (TL-07b/c), zoom (TL-08), project-wide export (EXP-04), average confidence in export (EXP-07), deleting recordings/projects (PRJ-07), renaming recordings (PRJ-06), recent projects list UI (PRJ-05). Basic chat commands (/start, /end, /mute) already work.
+4. macOS (Core Audio taps Swift helper) and Linux spikes and installs: need those machines and the user.
+5. `requirements-gpu.txt` is not generated yet.
 
 ## Key decisions (details and rationale in SPEC.md)
 
@@ -40,6 +47,7 @@ Context for Claude Code sessions working on this project.
 
 ## Working with the user
 
+- Commits: the user allows Claude to commit directly to `main` (end commit messages with the Co-Authored-By line).
 - The user iterates on the design collaboratively: propose a recommendation with brief reasoning, then update `SPEC.md` once they agree.
 - Cares about the important Phase 0 questions (hotwords, speed, pyannote, installs), not minor technical details like clock drift.
 - Prefers simple solutions over feature-rich ones (e.g. dropped pause, dropped installers, dropped split audio).
