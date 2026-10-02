@@ -14,6 +14,8 @@ dependencies = [
     "numpy>=1.26",
     "platformdirs>=4.0",
     "av<16",  # faster-whisper 1.2 passes metadata_errors, removed in PyAV 16+
+    "soundcard>=0.4.6",
+    "soxr>=1.1.0",
 ]
 
 [project.scripts]
@@ -35,3 +37,8 @@ torchaudio = [{ index = "pytorch-cpu" }]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
+
+[dependency-groups]
+dev = [
+    "psutil>=7.2.2",
+]

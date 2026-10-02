@@ -70,3 +70,22 @@ Loading from bundled files works offline with `HF_HUB_OFFLINE=1`. Passing audio 
 | large-v3-turbo (hotwords, no previous-text conditioning) + community-1 in its own process | ~0.58 | ~35 min |
 
 A typical laptop is expected to take roughly 50–70 minutes.
+
+# Phase 0 results: Windows audio capture and install
+
+## System audio + mic capture (`spikes/capture_spike.py`)
+
+Library: `soundcard` 0.4.6 (WASAPI loopback of the default output device; also supports Linux monitor sources). Both sources were recorded at 48 kHz in 100 ms blocks in two threads, then resampled to 16 kHz with `soxr`.
+
+- **Both sources record together.** A quiet test tone played through the speakers appeared on the system track. It also leaked into the laptop mic, which is why the headphones hint is needed (§6.1).
+- **Silence on the system side keeps the tracks aligned.** While nothing plays, loopback delivers digital silence instead of stalling, so both tracks stay the same length.
+- **No drift measured:** in a 5-minute recording, both tracks came out at 299.9 s. Both started about 0.25 s after the wall clock, which is startup latency, the same for both.
+- **CPU use:** 10% of one core over 5 minutes (target < 10%, NFR-04). This is unoptimised spike code; larger blocks and writing straight to WAV should lower it.
+- *Pending:* a test with real speech and a video, judged by ear.
+
+## Clean install with plain pip (Windows)
+
+- `requirements.txt` is generated with `uv export --no-hashes --no-dev --no-emit-project --emit-index-url`. `--emit-index-url` is needed: without it, pip cannot find the CPU builds of PyTorch (`torch==…+cpu`), which only exist on the PyTorch package index.
+- Fresh `python -m venv` + `pip install -r requirements.txt`: **succeeded in 132 s**, giving CPU-only PyTorch and a **1.4 GB** environment (plus 1.6 GB for the `large-v3-turbo` model).
+- The pipeline spike runs in that environment.
+- Not yet done: `requirements-gpu.txt`, and the macOS and Linux installs.

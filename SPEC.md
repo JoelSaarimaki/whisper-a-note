@@ -554,7 +554,7 @@ All data is stored as plain files in the project folder. No database.
 
 | OS | Approach | Notes |
 |---|---|---|
-| Windows | WASAPI loopback (e.g. `PyAudioWPatch` or `soundcard`) | No extra setup needed. |
+| Windows | WASAPI loopback via **`soundcard`** (confirmed in Phase 0) | No extra setup needed. While nothing plays, loopback delivers silence, so the tracks stay aligned. |
 | macOS | **Core Audio process taps** (macOS **14.2+** only) via a small prebuilt Swift helper | Requires the "System Audio Recording" permission. Highest-risk platform; needs a spike early. |
 | Linux | PulseAudio/PipeWire **monitor source** (e.g. `soundcard`) | Generally works without setup. |
 
@@ -660,7 +660,7 @@ Developers manage dependencies with [uv](https://docs.astral.sh/uv/). **End user
 |---|---|
 | DEV-1 | Dependencies are declared in `pyproject.toml` (standard `[project]` table) and locked in `uv.lock`, which is committed. |
 | DEV-2 | PyTorch's CPU and CUDA package sources are configured as uv indexes in `pyproject.toml`, so the CPU/GPU split (DIST-02) is defined in one place. |
-| DEV-3 | `requirements.txt` and `requirements-gpu.txt` are **generated** with `uv export` and committed; they are never edited by hand. They must be valid on Windows, macOS and Linux. |
+| DEV-3 | `requirements.txt` and `requirements-gpu.txt` are **generated** with `uv export --no-hashes --no-dev --no-emit-project --emit-index-url` and committed (`--emit-index-url` adds the PyTorch package index, without which pip cannot find the CPU builds); they are never edited by hand. They must be valid on Windows, macOS and Linux. |
 | DEV-4 | CI fails if the committed requirements files do not match `uv.lock`. |
 | DEV-5 | Developers create their environment with `uv sync`, and uv manages the Python version (pinned in `.python-version`, within the supported range of DIST-03). |
 
