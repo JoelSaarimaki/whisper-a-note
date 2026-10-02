@@ -13,7 +13,8 @@ Context for Claude Code sessions working on this project.
 ## Status
 
 - Spec at Draft v0.7 (2026-10-02). All open questions resolved.
-- Project skeleton exists (`pyproject.toml`, uv, `whisper_a_note/`); spikes in `spikes/`, results in `spikes/PHASE0_RESULTS.md`. Test models and recordings are gitignored (`spikes/models/`, `spikes/test_audio/`, `audio_test_files_finnish/`).
+- **MVP in progress (Windows works end to end):** `whisper_a_note/` has `storage/` (JSON files, notes, metadata), `audio/` (recorder, finalize/recovery), `transcription/` (chunked Whisper + pyannote worker processes, job state machine), `export.py`, and `ui/` (PySide6: setup dialog, Recording mode, Review mode with timeline, settings). Tests in `tests/` (`uv run pytest`; `RUN_SLOW=1` for the end-to-end job test). Not done yet: macOS/Linux spikes, P2/P3 features, by-ear capture check, a real-world test by the user.
+- Spikes in `spikes/`, results in `spikes/PHASE0_RESULTS.md`. Test models and recordings are gitignored (`spikes/models/`, `spikes/test_audio/`, `audio_test_files_finnish/`).
 - **Phase 0 spikes** (SPEC §10):
   1. macOS system audio via Core Audio process taps (Swift helper streaming PCM to Python); clock drift between tracks is only a quick, minor check.
   2. **Done on Windows:** pipeline works offline; `large-v3-turbo` default, context as `hotwords` only (no previous-text conditioning), pyannote community-1, audio passed to pyannote in memory. Windows capture (`soundcard`, mic + loopback) and a clean pip install also work; by-ear test of real speech deferred to the first MVP recording.

@@ -465,7 +465,7 @@ All data is stored as plain files in the project folder. No database.
 
 - `duration_ms` is `null` until the recording ends or is recovered (REC-12).
 - `end_requested_ms`: audio time at which End was pressed (REC-04a); used to cut the recording, also on recovery. `null` while recording.
-- `language`: per-recording language override (CTX-03); `null` = use the project setting.
+- `language`: per-recording language override (CTX-03): `null` = use the project setting, `"auto"` = auto-detect, otherwise a language code.
 - `context`: the recording context (CTX-06); empty if not used.
 - `mutes.reason`: `user` (mute toggle), `device_lost` (REC-13) or `system_sleep` (REC-19, zero-length).
 
