@@ -41,4 +41,5 @@ explicit = true
 [dependency-groups]
 dev = [
     "psutil>=7.2.2",
+    "pytest>=9.1.1",
 ]
