@@ -12,10 +12,11 @@ Context for Claude Code sessions working on this project.
 
 ## Status
 
-- Spec at Draft v0.6 (2026-10-02). All open questions resolved.
-- No code yet. **Next step: Phase 0 spikes** (SPEC §10):
+- Spec at Draft v0.7 (2026-10-02). All open questions resolved.
+- Project skeleton exists (`pyproject.toml`, uv, `whisper_a_note/`); spikes in `spikes/`, results in `spikes/PHASE0_RESULTS.md`. Test models and recordings are gitignored (`spikes/models/`, `spikes/test_audio/`, `audio_test_files_finnish/`).
+- **Phase 0 spikes** (SPEC §10):
   1. macOS system audio via Core Audio process taps (Swift helper streaming PCM to Python); clock drift between tracks is only a quick, minor check.
-  2. faster-whisper + pyannote pipeline on CPU, with word confidence; pyannote loaded from the bundled files without a token or network; choose the pyannote version to bundle (3.1 vs. community-1); measure speed per model; check that the context text guides the whole recording via `hotwords`.
+  2. **Done on Windows:** pipeline works offline; `large-v3-turbo` default, context as `hotwords` only (no previous-text conditioning), pyannote community-1, audio passed to pyannote in memory. Remaining: Windows system audio capture.
   3. Clean `pip install -r requirements.txt` on Windows, macOS and Linux.
 - Then: project skeleton (`pyproject.toml`, uv, package layout following PKG-1–9), then the MVP (all P1 requirements).
 
@@ -25,9 +26,9 @@ Context for Claude Code sessions working on this project.
 - **UI:** dark theme, English only. Compact *Recording mode* (normal resizable window, not always on top; can be narrow or screen-tall; top to bottom: header, note history, note input, controls), entered through a *recording setup* step (project, context texts, devices + sound check), and full *Review mode* (three-column timeline: audio / transcript / notes).
 - **OS:** Windows, macOS **14.2+** (Core Audio taps only, no older fallbacks), Linux.
 - **Audio:** separate mic and system tracks plus a mixed playback file. **No pause**: "Mute all" (off the record) instead; ending a recording is final, after a 5 s "Ending recording…" grace period with Cancel.
-- **Transcription:** on demand after recording only, never live. faster-whisper + pyannote. **CPU-only must work**; GPU optional. Default model `small`, `large-v3-turbo` recommended upgrade.
+- **Transcription:** on demand after recording only, never live. faster-whisper + pyannote. **CPU-only must work**; GPU optional. Default model `large-v3-turbo` (accuracy first, speed second); `large-v3` selectable.
 - **Languages:** fixed or auto-detect (P1); mixed-language mode with per-speaker-turn detection restricted to expected languages (P2).
-- **Context:** one project context plus an optional per-recording context, combined as the Whisper prompt/`hotwords`.
+- **Context:** one project context plus an optional per-recording context, combined and passed to Whisper as `hotwords`.
 - **Concurrency:** no recording while a transcription runs; only one transcription running at a time (interrupting frees the slot).
 - **Notes:** per recording; timestamps always within the audio, single timestamp (submission time); submitted in Recording mode between Start and End, plus one replaceable closing note at the end after End (NOTE-02b). Faulty entries in edited files (outside the audio or otherwise invalid) are ignored and flagged, but not protected: the next save drops them.
 - **Confidence:** exact per-word values in JSON export; low-confidence words (< 70%) marked in italics in Markdown (legend in YAML front matter) and moderately highlighted in the UI.

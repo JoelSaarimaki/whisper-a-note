@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Draft v0.6 — all open questions resolved |
+| **Status** | Draft v0.7 — all open questions resolved; Phase 0 pipeline results included |
 | **Date** | 2026-10-02 |
 
 Requirements are identified as `AREA-NN` so they can be referenced in issues and tests. Priority: **P1** = required for the first release (MVP), **P2** = planned follow-up, **P3** = nice to have. Items marked *(proposed)* are suggested additions beyond the user's requests.
@@ -111,7 +111,7 @@ Context texts are edited in Review mode (and in the recording setup, REC-20) and
 | ID | Pri | Requirement |
 |---|---|---|
 | CTX-01 | P1 | Each **project** has **one context text**, shared by all its recordings and editable at any time. |
-| CTX-02 | P1 | The context text is passed to Whisper as the initial prompt **and** as `hotwords`, so it guides every 30-second window and not only the start of the recording (faster-whisper's initial prompt is soon pushed out by the previously transcribed text; to be confirmed in Phase 0). Whisper's prompt limit is about 220 tokens: roughly 100–150 words in English, fewer in languages such as Finnish. The UI hints that the text should be **short (about 100 words)** and list key names and terms concisely. |
+| CTX-02 | P1 | The context text is passed to Whisper as **`hotwords`**, which guides every 30-second window of the recording. It is not passed as the initial prompt, and conditioning on previously transcribed text is turned off (`condition_on_previous_text=False`). Phase 0 confirmed this: with `hotwords`, names stayed correct through a whole 8.6-minute test recording, while an initial prompt helped less and faded; adding the initial prompt on top of `hotwords` made Finnish results slightly worse; and turning off previous-text conditioning kept the same quality, ran ~25% faster and removes the cause of repetition loops (`spikes/PHASE0_RESULTS.md`). Whisper's prompt limit is about 220 tokens: roughly 100–150 words in English, fewer in languages such as Finnish. The UI hints that the text should be **short (about 100 words)** and list key names and terms concisely. |
 | CTX-03 | P1 | **Language setting** per project: **Auto-detect**, or a **fixed language** chosen from all languages Whisper supports. A recording can override the project setting before transcription. See §5.6.1. |
 | CTX-04 | P2 | **Mixed-language mode:** the user selects a short list of expected languages (e.g. Finnish, Swedish, English), and language is detected per speaker turn. See §5.6.1. |
 | CTX-05 | P2 | Optional field for **expected number of speakers** (passed to diarization). |
@@ -192,7 +192,7 @@ Messages starting with `/` in the note input are interpreted as commands and are
 | TRN-04 | P1 | Job controls: **Start, Interrupt, Resume, Stop, Restart** (see job states below). **Restart clears previous results** and therefore asks for confirmation when results exist: they cannot be restored, and re-running can take about as long as the meeting itself. |
 | TRN-05 | P1 | Progress is shown (stage and percentage). The job runs in the background; the UI remains usable. |
 | TRN-06 | P1 | **Low-confidence words are highlighted moderately** wherever transcript text is shown (timeline, segment details), using the same threshold as the export (§5.8.1). The highlight must not dominate the text: e.g. a subtle dotted underline or a slightly muted text colour, not bold or a strong background. Hovering a highlighted word shows its confidence as a percentage. The highlight can be turned off in settings. |
-| TRN-07 | P1 | Model size is selectable in settings (e.g. `small`, `medium`, `large-v3-turbo`, `large-v3`). The app runs on **CPU by default**; an NVIDIA GPU is used automatically when the GPU requirements are installed. |
+| TRN-07 | P1 | Model size is selectable in settings: **`large-v3-turbo` (default)**, `large-v3` (most accurate, about 3× slower on CPU), and the smaller `medium` and `small` for slow machines. The app runs on **CPU by default**; an NVIDIA GPU is used automatically when the GPU requirements are installed. |
 | TRN-07a | P1 | Before starting, the app shows an **estimated duration** of the transcription for the chosen model on this machine (based on the measured speed of previous runs, or a conservative default). |
 | TRN-08 | P2 | **Speakers can be renamed** (e.g. `Speaker 1` → `Anna`); names apply throughout the timeline and export. Restart (TRN-04) clears the names too, because a new diarization may assign the speakers differently. |
 | TRN-09 | P2 | Track source (mic vs. system) is used to improve speaker attribution, e.g. the local user is reliably identified from the mic track. |
@@ -545,8 +545,8 @@ All data is stored as plain files in the project folder. No database.
 └─────────────┘                              └────────────────────────────┘
 ```
 
-- **Transcription runs in a separate process** so the UI stays responsive, the job can be cancelled cleanly, and ML memory is released afterwards.
-- **Pipeline (Fixed / Auto-detect):** (1) Whisper on the mixed file → segments and words with probability; (2) pyannote diarization → speaker turns; (3) assign each word to the speaker turn it overlaps most; regroup into segments on speaker change.
+- **Transcription runs in a separate process** so the UI stays responsive, the job can be cancelled cleanly, and ML memory is released afterwards. **Whisper and pyannote run in separate worker processes, one after the other**, never in the same process: in Phase 0, diarization ran about 30% slower right after faster-whisper in the same process, as their thread pools competed for the CPU.
+- **Pipeline (Fixed / Auto-detect):** (1) Whisper on the mixed file → segments and words with probability; (2) pyannote diarization → speaker turns, with the audio passed to pyannote **in memory** (as an already-decoded waveform, not a file path), so pyannote never decodes audio itself: its own decoder (torchcodec) would need FFmpeg installed on the system; (3) assign each word to the speaker turn it overlaps most; regroup into segments on speaker change.
 - **Pipeline (Mixed, P2):** (1) pyannote diarization → speaker turns; (2) detect the language per turn, restricted to the expected languages, with the fallbacks of §5.6.1; (3) Whisper transcribes each turn with its language. The diarization step order is the only structural difference, so both pipelines share the same components.
 - **Interrupt/resume:** processing in chunks of the audio, saving progress after each chunk.
 
@@ -570,20 +570,19 @@ If system capture is unavailable, the app still works with mic-only recording an
 
 - **The diarization models are bundled with the app; the default Whisper model is downloaded once during setup** (DIST-04). The user never needs a Hugging Face account or access token.
 - **pyannote (bundled, fully offline):** the developer downloads the diarization models once (accepting the Hugging Face gate with their own account) and commits the weight files and pipeline configuration **into the application package** (e.g. `whisper_a_note/models/pyannote/`). The app loads the pipeline from these bundled files only, so diarization never needs a token or network access, not even during setup. This is permitted because the models are released under open licences (MIT / CC-BY-4.0). The Hugging Face gate is an access condition, not a ban on redistribution. Requirements:
-  - The model version is chosen in Phase 0 (3.1 pipeline vs. community-1, which needs pyannote.audio 4), by accuracy and CPU speed.
+  - **Bundled version: `speaker-diarization-community-1`** (pyannote.audio 4, CC-BY-4.0, ~33 MB), chosen in Phase 0: on the Finnish test meeting it found all 4 speakers by itself and attributed 92% of words correctly, while the older 3.1 pipeline found only 3 speakers (69%). Its configuration already refers to its files by relative path.
   - Verify the licence of the **exact model versions** bundled.
   - Ship each model's **licence file** next to its weights and include the required **attribution** in the app's About/licences screen (PKG-8).
   - The pipeline configuration refers to the bundled weight files by relative path, never by Hugging Face model ID.
   - The diarization models are small (tens of MB), so they are committed as normal files (not Git LFS, whose files are missing from plain ZIP downloads by default).
   - Updating the models is a deliberate developer step: download the new version, verify licence and results, commit.
-- **Whisper:** one default model (`small`, ~0.5 GB) is downloaded during setup. Larger models (`medium` ~1.5 GB, `large-v3-turbo` ~1.6 GB, `large-v3` ~3 GB) are **optional downloads** from settings. These come from public repositories and need no token. Apart from setup, this is the only network use (NFR-01).
-- **Audio decoding:** faster-whisper decodes audio via PyAV, which bundles the FFmpeg libraries, so no separate FFmpeg install is needed.
+- **Whisper:** the default model (`large-v3-turbo`, ~1.6 GB) is downloaded during setup. Other models (`large-v3` ~3 GB, `medium` ~1.5 GB, `small` ~0.5 GB) are **optional downloads** from settings. These come from public repositories and need no token. Apart from setup, this is the only network use (NFR-01).
+- **Audio decoding:** faster-whisper decodes audio via PyAV, which bundles the FFmpeg libraries, so no separate FFmpeg install is needed. PyAV must stay **below version 16**: faster-whisper 1.2 uses an option that PyAV 16 removed (found in Phase 0).
 - **CPU first (Q8):** the app is designed and tested for CPU-only machines.
-  - `small` is the default: good accuracy for clear meeting audio at a speed that is practical on a laptop CPU.
-  - `large-v3-turbo` is the recommended upgrade on CPU: much better accuracy than `small`, at a fraction of the cost of `large-v3`.
-  - `large-v3` gives the best accuracy but is slow on CPU (often slower than real time); the settings say so.
-  - pyannote diarization also runs on CPU; it is considerably faster than transcription.
-  - Actual speeds per model are measured in Phase 0 and used for the default estimates (TRN-07a).
+  - **Accuracy comes first, speed second** (Q44). `large-v3-turbo` is the default: on the Finnish test meeting it made clearly fewer errors than `small` (WER 37% vs 48%) at a similar speed, and was nearly as accurate as `large-v3` at about a third of its time.
+  - `large-v3` gives the best accuracy but is slow on CPU (about real time on a fast laptop); the settings say so.
+  - pyannote diarization also runs on CPU and takes **about as long as transcription** (Phase 0: ~0.3× the audio length on a fast laptop; ~97% of it is computing speaker embeddings). Default settings are kept: halving the number of analysis windows doubled the speed but lost some accuracy, and fewer windows than that broke speaker detection. Thread count and batch sizes made no real difference.
+  - Measured on a fast laptop (Intel Core Ultra 9 285H, 16 cores): `large-v3-turbo` ~0.26× + diarization ~0.32× the audio length, so a **1-hour meeting takes ~35 minutes**; a typical laptop is expected to take roughly 50–70 minutes. These figures seed the estimates (TRN-07a).
 - **GPU acceleration (optional):** NVIDIA CUDA on Windows/Linux via `requirements-gpu.txt`. On macOS, faster-whisper runs on CPU and pyannote can use Apple Silicon (MPS).
 
 ### 8.5 Distribution and installation
@@ -627,7 +626,7 @@ The scripts call the virtual environment's Python directly instead of "activatin
 
 | ID | Requirement |
 |---|---|
-| DIST-01 | All dependencies are **pinned to exact versions** in `requirements.txt`, so every user gets a known-good combination. |
+| DIST-01 | All dependencies are **pinned to exact versions** in `requirements.txt`, so every user gets a known-good combination. Phase 0 already found one breaking combination (faster-whisper 1.2 with PyAV 16+, §8.4). |
 | DIST-02 | PyTorch is installed as the **CPU-only build** by default on all OSes. This keeps the download at roughly 1 GB instead of 3+ GB; on Linux, pip otherwise pulls the CUDA build by default. GPU support is opt-in via `requirements-gpu.txt`. |
 | DIST-03 | On startup the app **checks the Python version** and shows a clear message if it is outside the supported range. |
 | DIST-04 | Models are **not installed via pip**. The **pyannote models are bundled** in the application package (§8.4). The setup script downloads the default **Whisper** model from its public repository to the local model folder. **No token is needed.** If the Whisper model is missing at startup (e.g. an interrupted download), the app shows a clear message and offers to download it. |
@@ -687,7 +686,7 @@ Poetry and pip-tools were considered. Poetry handles PyTorch's separate package 
 | NFR-05 | **Transparency:** all data is human-readable (JSON, Markdown) or standard audio formats; folders can be backed up, moved or deleted with normal file tools. |
 | NFR-06 | **Accessibility:** core actions available via keyboard. |
 | NFR-07 | **Simple installation:** with Python installed, setup is one script per OS (§8.5); the default setup works offline straight after it completes. |
-| NFR-08 | **CPU-only operation:** all features work without a GPU. Transcription on CPU uses int8 quantised models. Target: a 1-hour meeting is transcribed and diarized with the default model in **at most about 1 hour** on a typical recent laptop CPU (to be validated in Phase 0). |
+| NFR-08 | **CPU-only operation:** all features work without a GPU. Transcription on CPU uses int8 quantised models. Target: a 1-hour meeting is transcribed and diarized with the default model in **about 1 hour** on a typical recent laptop CPU. **Accuracy takes priority** over this target (Q44); Phase 0 measured ~35 minutes on a fast laptop (§8.4). |
 | NFR-09 | **Unreadable files:** if a file exists but cannot be read (e.g. invalid JSON, unsupported `schema_version`, I/O error), the app shows a **clear error** naming the file and the problem. It never treats the file as empty, never creates a new or empty file in its place, and never writes to it. Actions that would write that file are disabled until the file is fixed or removed. Other recordings and projects are unaffected. (Faulty *entries* inside a readable file are handled per NOTE-05b.) |
 | NFR-10 | **No encryption by the app:** data is stored unencrypted as plain files (NFR-05). Users who need protection at rest are advised to use the operating system's disk encryption (BitLocker, FileVault, LUKS). |
 
@@ -697,7 +696,7 @@ Poetry and pip-tools were considered. Poetry handles PyTorch's separate package 
 
 | Phase | Scope |
 |---|---|
-| **0 – Spikes** | System audio capture on all three OSes (macOS Core Audio taps helper first), with a quick check of clock drift between the tracks (minor, REC-07); faster-whisper + pyannote pipeline with word confidence on a sample file, loading pyannote from the bundled files without a token or network, choosing the pyannote model version to bundle (e.g. the 3.1 pipeline vs. the newer community-1, by accuracy and CPU speed), and checking that the context text guides the whole recording via `hotwords` (CTX-02); a clean `pip` install on each OS from `requirements.txt`. |
+| **0 – Spikes** | System audio capture on all three OSes (macOS Core Audio taps helper first), with a quick check of clock drift between the tracks (minor, REC-07); faster-whisper + pyannote pipeline with word confidence on a sample file, loading pyannote from the bundled files without a token or network, choosing the pyannote model version to bundle, and checking that the context text guides the whole recording via `hotwords` (CTX-02) (**done on Windows**, see `spikes/PHASE0_RESULTS.md`: `large-v3-turbo`, `hotwords`, community-1); a clean `pip` install on each OS from `requirements.txt`. |
 | **1 – MVP** | All P1 requirements: projects, context, recording setup with sound check, dual-track recording with meters, mute and crash recovery, notes with auto/manual timestamps, transcription with job controls and fixed/auto-detected language, low-confidence highlighting, three-column timeline with verification playback, Markdown export with the confidence JSON. **Exit check:** a throwaway PyInstaller build runs on each OS (packaging readiness, §8.5). |
 | **2 – Usability** | All P2 requirements, mainly: chat commands, audio import, mixed-language mode, dragging and batch-shifting notes on the timeline, deleting recordings and projects, speaker renaming, replay/loop and playback speed, zoom, project-wide export. |
 | **3 – Extras** | P3: jump to the next low-confidence passage (TRN-10), per-segment language correction (§5.6.1), other refinements. |
@@ -752,4 +751,6 @@ There are currently **no open questions**. New ones are added here as they come 
 | Q40 | Should there be reminders while Mute all is on, or warnings for a silent source? | No. A clear indicator shows Mute all (REC-06), and a silent source is visible from its level meter (REC-02). Former REC-10 removed. |
 | Q41 | Which proposed additions are kept? | Kept: expected number of speakers (CTX-05), speaker renaming (TRN-08), mic-based speaker attribution (TRN-09), jump to low-confidence passages (TRN-10). Dropped: faulty-entry list (former NOTE-05c), quote/observation notes (former NOTE-12, and the `kind` field), single-word transcript correction (former TRN-13), global hotkey, per-source mute commands and text after `/start`. |
 | Q42 | Sample rate of the stored audio? | **16 kHz** for now: what Whisper uses, small files, clear enough for speech playback. Revisit only if playback proves too muffled. |
-| Q43 | Which pyannote model version is bundled? | Decided in **Phase 0**, by accuracy and CPU speed (§8.4). |
+| Q43 | Which pyannote model version is bundled? | **community-1** (Phase 0): it found the right number of speakers by itself and attributed far more words correctly than 3.1 (§8.4). |
+| Q44 | Default Whisper model, and accuracy vs. speed? | **`large-v3-turbo`** (Phase 0). Accuracy comes first; speed is secondary but not irrelevant, which rules out `large-v3` as the default (about 3× slower on CPU). `large-v3` stays selectable. |
+| Q45 | How is the context text passed to Whisper? | As `hotwords` only, with previous-text conditioning off (CTX-02, Phase 0). |
