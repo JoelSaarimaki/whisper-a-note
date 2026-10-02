@@ -97,6 +97,14 @@ class Project:
     def _taken(self, base: str) -> bool:
         return any(p.name.startswith(base + ".") for p in self.folder.iterdir())
 
+    def audio_path(self, base: str) -> Path | None:
+        """The recording's playback/transcription file: the mixed file, or an imported one."""
+        for ext in AUDIO_EXTENSIONS:
+            p = self.folder / f"{base}{ext}"
+            if p.exists():
+                return p
+        return None
+
     def path(self, base: str, kind: str) -> Path:
         """File of a recording, e.g. path(base, 'notes.json') or path(base, 'mic.wav')."""
         return self.folder / f"{base}.{kind}"
