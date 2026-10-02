@@ -122,3 +122,15 @@ def test_recording_mode_session(app, tmp_path):
     meta = RecordingFile(project.path(win.base, "recording.json")).meta
     assert meta.context == "Participants: Anna" and any(m.source == "all" for m in meta.mutes)
     win.close()
+
+
+def test_language_lists_common_or_all(app):
+    from PySide6.QtWidgets import QComboBox
+    from whisper_a_note.ui import languages
+    combo = QComboBox()
+    languages.fill_combo(combo, [("Auto-detect", None)], False, None)
+    assert combo.count() == 1 + len(languages.COMMON) and combo.currentData() is None
+    languages.fill_combo(combo, [("Auto-detect", None)], False, "af")  # current choice stays listed
+    assert combo.currentData() == "af" and combo.count() == 2 + len(languages.COMMON)
+    languages.fill_combo(combo, [("Auto-detect", None)], True, "fi")
+    assert combo.count() == 101 and combo.currentText() == "Finnish"

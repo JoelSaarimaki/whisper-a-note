@@ -68,6 +68,10 @@ class SettingsDialog(QDialog):
         form.addRow("", self.highlight)
         form.addRow("Marking in Markdown export", self.marker)
 
+        self.all_languages = QCheckBox("Show all languages (otherwise only about 30 common ones)")
+        self.all_languages.setChecked(settings.show_all_languages)
+        form.addRow("Language lists", self.all_languages)
+
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
@@ -95,5 +99,6 @@ class SettingsDialog(QDialog):
         s.confidence_threshold = round(self.threshold.value() / 100, 2)
         s.highlight_low_confidence = self.highlight.isChecked()
         s.export_marker = self.marker.currentData()
+        s.show_all_languages = self.all_languages.isChecked()
         s.save()
         self.accept()

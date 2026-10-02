@@ -19,6 +19,7 @@ class AppSettings:
     confidence_threshold: float = 0.70   # Q9
     highlight_low_confidence: bool = True  # TRN-06
     export_marker: str = "italic"        # §5.8.1
+    show_all_languages: bool = False     # CTX-03a: otherwise only common languages are listed
     recent_projects: list = field(default_factory=list)
     measured_rtf: dict = field(default_factory=dict)  # model -> processing time / audio time (TRN-07a)
     recording_geometry: str | None = None

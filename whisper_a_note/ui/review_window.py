@@ -68,18 +68,12 @@ class ReviewWindow(QMainWindow):
         self.project_context = QPlainTextEdit()
         self.project_context.setPlaceholderText("Project context: topic, names, terms (shared by all recordings)")
         self.project_language = QComboBox()
-        self.project_language.addItem("Auto-detect", None)
-        for code, label in languages.all_languages():
-            self.project_language.addItem(label, code)
         self.recordings = QListWidget()
         self.recordings.currentItemChanged.connect(lambda cur, _: self.open_recording(cur.data(Qt.UserRole) if cur else None))
         self.recording_context = QPlainTextEdit()
         self.recording_context.setPlaceholderText("Recording context: participants, topics, other notes")
         self.recording_language = QComboBox()
-        self.recording_language.addItem("Use the project setting", None)
-        self.recording_language.addItem("Auto-detect", "auto")
-        for code, label in languages.all_languages():
-            self.recording_language.addItem(label, code)
+        self.fill_language_lists()
         ctx_hint = QLabel("Keep both context texts short (about 100 words together). Changes apply to the next transcription.")
         ctx_hint.setObjectName("hint")
         ctx_hint.setWordWrap(True)
@@ -235,13 +229,10 @@ class ReviewWindow(QMainWindow):
         self.settings.add_recent(str(folder))
         self.settings.save()
         self._refresh_projects()
-        for w in (self.project_context, self.project_language):
-            w.blockSignals(True)
+        self.project_context.blockSignals(True)
         self.project_context.setPlainText(self.project.settings.context)
-        lang = self.project.settings.language if self.project.settings.language_mode == "fixed" else None
-        self.project_language.setCurrentIndex(max(0, self.project_language.findData(lang)))
-        for w in (self.project_context, self.project_language):
-            w.blockSignals(False)
+        self.project_context.blockSignals(False)
+        self.fill_language_lists()
         self._recover(select)
 
     def _recover(self, select: str | None) -> None:
@@ -342,7 +333,7 @@ class ReviewWindow(QMainWindow):
             self.recording_context.blockSignals(True)
             self.recording_context.setPlainText(self.meta_file.meta.context)
             self.recording_context.blockSignals(False)
-            self.recording_language.setCurrentIndex(max(0, self.recording_language.findData(self.meta_file.meta.language)))
+            self.fill_language_lists()
             self.player.load(self.project.audio_path(base))
             self._show_timeline()
         self._update_controls()
@@ -393,6 +384,16 @@ class ReviewWindow(QMainWindow):
                 self.meta_file.update(context=self.recording_context.toPlainText())
         except (UnreadableFileError, OSError) as e:
             QMessageBox.warning(self, "Cannot save", str(e))
+
+    def fill_language_lists(self) -> None:
+        """Common languages, or all of them (setting); the current choice is always listed."""
+        show_all = self.settings.show_all_languages
+        s = self.project.settings if self.project else None
+        project_lang = s.language if s and s.language_mode == "fixed" else None
+        languages.fill_combo(self.project_language, [("Auto-detect", None)], show_all, project_lang)
+        rec_lang = self.meta_file.meta.language if self.meta_file and self.writable else None
+        languages.fill_combo(self.recording_language, [("Use the project setting", None), ("Auto-detect", "auto")],
+                             show_all, rec_lang)
 
     def _save_project_language(self) -> None:
         code = self.project_language.currentData()

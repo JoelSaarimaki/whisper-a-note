@@ -65,10 +65,8 @@ class RecordingSetupDialog(QDialog):
         form.addRow("", hint)
 
         self.language = QComboBox()
-        self.language.addItem("Use the project setting", PROJECT_SETTING)
-        self.language.addItem("Auto-detect", None)
-        for code, label in languages.all_languages():
-            self.language.addItem(label, code)
+        languages.fill_combo(self.language, [("Use the project setting", PROJECT_SETTING), ("Auto-detect", None)],
+                             settings.show_all_languages, PROJECT_SETTING)
         form.addRow("Language", self.language)
 
         devices = list_devices()

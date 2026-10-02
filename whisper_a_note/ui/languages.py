@@ -25,6 +25,13 @@ NAMES = {
 }
 
 
+# Shown by default; "Show all languages" in Settings lists all of them (CTX-03a).
+COMMON = {
+    "ar", "cs", "da", "de", "el", "en", "es", "et", "fi", "fr", "he", "hi", "hu", "is", "it",
+    "ja", "ko", "lt", "lv", "nl", "no", "pl", "pt", "ro", "ru", "sk", "sv", "tr", "uk", "zh",
+}
+
+
 def all_languages() -> list[tuple[str, str]]:
     """(code, name) for every language Whisper supports, sorted by name."""
     try:
@@ -32,6 +39,23 @@ def all_languages() -> list[tuple[str, str]]:
     except ImportError:
         codes = tuple(NAMES)
     return sorted(((c, NAMES.get(c, c)) for c in codes), key=lambda x: x[1])
+
+
+def choices(show_all: bool, keep: str | None = None) -> list[tuple[str, str]]:
+    """The languages for a list: common ones, or all; `keep` (the current choice) is always included."""
+    return [(c, n) for c, n in all_languages() if show_all or c in COMMON or c == keep]
+
+
+def fill_combo(combo, fixed: list[tuple[str, object]], show_all: bool, current) -> None:
+    """Fill a language combo box: fixed entries first (e.g. Auto-detect), then languages."""
+    combo.blockSignals(True)
+    combo.clear()
+    for label, data in fixed:
+        combo.addItem(label, data)
+    for code, label in choices(show_all, current if isinstance(current, str) else None):
+        combo.addItem(label, code)
+    combo.setCurrentIndex(max(0, combo.findData(current)))
+    combo.blockSignals(False)
 
 
 def name(code: str | None) -> str:

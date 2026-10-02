@@ -112,6 +112,7 @@ class Controller(QObject):
         if SettingsDialog(self.settings, self.download_model, self.review).exec() and self.review:
             if self.settings.projects_folder != old:
                 self.review._refresh_projects()
+            self.review.fill_language_lists()
             self.review._show_timeline()
 
     # --- state shared by windows ---------------------------------------------------------
