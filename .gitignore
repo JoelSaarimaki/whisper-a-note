@@ -222,4 +222,4 @@ spikes/models/
 spikes/test_audio/
 spikes/results/
 # Real meeting recordings for testing (contain other people's voices)
-audio_test_files_finnish/
+test_cases/

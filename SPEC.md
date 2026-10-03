@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Status** | Draft v0.7 — all open questions resolved; Phase 0 pipeline results included |
-| **Date** | 2026-10-02 |
+| **Status** | Draft v0.8 — first application test (English meeting) and UI feedback included |
+| **Date** | 2026-10-03 |
 
 Requirements are identified as `AREA-NN` so they can be referenced in issues and tests. Priority: **P1** = required for the first release (MVP), **P2** = planned follow-up, **P3** = nice to have. Items marked *(proposed)* are suggested additions beyond the user's requests.
 
@@ -112,6 +112,7 @@ Context texts are edited in Review mode (and in the recording setup, REC-20) and
 |---|---|---|
 | CTX-01 | P1 | Each **project** has **one context text**, shared by all its recordings and editable at any time. |
 | CTX-02 | P1 | The context text is passed to Whisper as **`hotwords`**, which guides every 30-second window of the recording. It is not passed as the initial prompt, and conditioning on previously transcribed text is turned off (`condition_on_previous_text=False`). Phase 0 confirmed this: with `hotwords`, names stayed correct through a whole 8.6-minute test recording, while an initial prompt helped less and faded; adding the initial prompt on top of `hotwords` made Finnish results slightly worse; and turning off previous-text conditioning kept the same quality, ran ~25% faster and removes the cause of repetition loops (`spikes/PHASE0_RESULTS.md`). Whisper's prompt limit is about 220 tokens: roughly 100–150 words in English, fewer in languages such as Finnish. The UI hints that the text should be **short (about 100 words)** and list key names and terms concisely. |
+| CTX-02a | P1 | A short **punctuation primer** (`Hello, everyone. Let's begin.`) always precedes the context in `hotwords`, also when there is no context. In the first application test, one chunk of an English meeting came out in lower case without any punctuation; with the primer it was punctuated and capitalised correctly. On the Finnish test recording the primer did not change the detected language and punctuation was slightly better. The primer is not part of the context texts and is not exported. |
 | CTX-03 | P1 | **Language setting** per project: **Auto-detect**, or a **fixed language** chosen from all languages Whisper supports. A recording can override the project setting before transcription. See §5.6.1. |
 | CTX-03a | P1 | Language lists show about **30 common languages** by default; a setting **"Show all languages"** lists all ~100 Whisper languages. A language already chosen for a project or recording is always listed. |
 | CTX-04 | P2 | **Mixed-language mode:** the user selects a short list of expected languages (e.g. Finnish, Swedish, English), and language is detected per speaker turn. See §5.6.1. |
@@ -142,7 +143,7 @@ Context texts are edited in Review mode (and in the recording setup, REC-20) and
 | REC-17 | P1 | **Closing the app during recording** asks for confirmation ("End recording?"); confirming ends the recording normally. |
 | REC-18 | P1 | **Disk space:** before Start, the app warns if free space is low (e.g. below 1 GB). If the disk fills up during recording, the recording ends safely, keeping all audio written so far, with a clear message. |
 | REC-19 | P1 | **System sleep during recording** (e.g. lid closed): after wake-up, recording continues from the same audio time; no silence is inserted for the time asleep. The point is stored as a zero-length interval with reason `system_sleep` and shown as a marker on the timeline. |
-| REC-20 | P1 | **Recording setup:** a short step before entering Recording mode, opened from Review mode ("New recording"). In one view, the user:<br>• picks the project or creates a new one and sets its name (PRJ-02);<br>• edits the project context and the new recording's context (CTX-01, CTX-06), and optionally its language (CTX-03);<br>• selects the mic and system audio devices and checks them with the sound check (REC-08, REC-11).<br>Confirming opens Recording mode, ready to Start. The recording's files are created on Start; cancelling the setup creates nothing. After End, starting another recording goes through the setup again, pre-filled with the same project and devices.<br>**Leaving without recording:** project changes (a new project, its name, project context edits) are saved when the setup is confirmed, as they belong to the project. Leaving Recording mode before Start (Review button) never creates a recording: no files and no empty entry in the recording list. The recording context and any draft note in the input are kept until the app is closed, and the next "New recording" in that project starts with them filled in. |
+| REC-20 | P1 | **Recording setup:** a short step before entering Recording mode, opened from Review mode ("New recording"). In one view, the user:<br>• picks the project or creates a new one and sets its name (PRJ-02); the project name field is shown only for a new project;<br>• optionally gives the recording a **name**, added to its base name after the date and time (§7.1), and edits the recording's context (CTX-06) and optionally its language (CTX-03). The project context is edited in Review mode, not in the setup;<br>• selects the mic and system audio devices and checks them with the sound check (REC-08, REC-11).<br>Confirming opens Recording mode, ready to Start. The recording's files are created on Start; cancelling the setup creates nothing. After End, starting another recording goes through the setup again, pre-filled with the same project and devices.<br>**Leaving without recording:** a new project is created when the setup is confirmed. Leaving Recording mode before Start (**Cancel** button) never creates a recording: no files and no empty entry in the recording list. The recording name, recording context and any draft note in the input are kept until the app is closed, and the next "New recording" in that project starts with them filled in. |
 
 ### 5.4 Manual notes (NOTE)
 
@@ -249,7 +250,7 @@ Mixed-language speech is hard for Whisper, because it assumes one language per 3
 |---|---|---|
 | TL-01 | P1 | A **vertical timeline** with time running downward and **three columns**: Audio, Transcript, Manual notes. |
 | TL-02 | P1 | The **start and end of the audio** are clearly marked. |
-| TL-03 | P1 | **Audio playback** with play/pause and seeking. A playhead moves along the timeline; clicking any item seeks to its timestamp. |
+| TL-03 | P1 | **Audio playback** with play/pause and seeking. A playhead moves along the timeline. Each transcript segment and each note has a **timestamp play button** (`▶ 00:14`); playback is started from these buttons only, not by clicking the text, so hovering the text shows nothing but the confidence of highlighted words (TRN-06). |
 | TL-04 | P1 | Transcript segments are shown with speaker label and text, colour-coded per speaker. |
 | TL-05 | P1 | **Mute intervals** are shown on the audio column (e.g. greyed out, labelled "muted" / "off the record"). |
 | TL-06 | P2 | Optional auto-scroll that keeps the playhead in view during playback. |
@@ -265,14 +266,14 @@ Mixed-language speech is hard for Whisper, because it assumes one language per 3
 | ID | Pri | Requirement |
 |---|---|---|
 | EXP-01 | P1 | Export a recording to a **single Markdown file** with: metadata header, context texts (project and recording), and a chronological merge of transcript segments and manual notes. A note is placed **after the transcript segment that covers its timestamp**, never inside it; several notes in the same segment follow it in timestamp order. Notes at a time with no transcript (e.g. a muted interval, or before transcription) are placed at their own position in time. |
-| EXP-02 | P1 | Export as **separate Markdown files**: transcript, notes, and context. |
+| EXP-02 | P1 | Export as **separate Markdown files**: transcript, notes, and context. Chosen in the settings (Export section) rather than next to the Export button. |
 | EXP-03 | P1 | The Markdown includes YAML front matter (project, recording, date, duration, speakers, model used, language, confidence marking) so tools can parse it. |
 | EXP-04 | P2 | Export all recordings of a project at once. |
 | EXP-05 | P1 | Export **per-word confidence as JSON** (`<base>.confidence.json`): every word with start/end time, speaker and confidence, plus segment-level metrics. Included in both single-file and separate-file exports. |
 | EXP-06 | P1 | **Low-confidence words are marked in the Markdown** with a text style (italic by default) instead of numbers; exact values live in the JSON. Marking can be turned off. See §5.8.1. |
 | EXP-07 | P2 | Each transcript segment in the Markdown can show its **average confidence**, e.g. `[00:00:04] Speaker 1 (avg 91%)`. |
 | EXP-08 | P1 | **Exporting again overwrites** the previous export files of that recording without asking. Exports are generated files and are not meant to be edited in place; copy them elsewhere to edit them. |
-| EXP-09 | P1 | Exports always go to the project's `exports/` folder; an **Open export folder** button opens it in the system file manager. |
+| EXP-09 | P1 | Exports always go to the project's `exports/` folder; after exporting, the result message offers **Open export folder** (besides OK), which closes the message and opens the folder in the system file manager. |
 
 #### 5.8.1 Confidence values
 
@@ -383,7 +384,8 @@ A small window for use during the meeting. It is a **normal window, not always o
 - A short hint recommends **headphones**: without them, the mic also picks up the remote participants from the speakers, which duplicates their speech in the mix and weakens mic-based speaker attribution (TRN-09).
 - Notes in the history can be edited and deleted (NOTE-06, NOTE-06a), but not re-timed (NOTE-07).
 - Context texts are not edited here; they are set in the recording setup (REC-20) or in Review mode.
-- When not recording, a **Review** button returns to Review mode.
+- Before Start, a **Cancel** button returns to Review mode without recording anything (REC-20). After End, the same button reads **Review**.
+- After End, no hint text is shown: the closing note (NOTE-02b) works without explanation.
 
 ```
 ┌──────────────────────────────┐
@@ -407,7 +409,10 @@ A normal resizable window.
 
 - **Left sidebar:** project selector, list of recordings, context editors (project context and the selected recording's context).
 - **Main area:** the three-column vertical timeline (§5.7) with playback controls. The notes column has a **note input** for adding notes at a chosen time (NOTE-04).
-- **Toolbar:** transcription controls and progress, export, **New recording**.
+- The **left sidebar keeps its width** when the window is resized; only the main area grows or shrinks. The divider can still be dragged.
+- **Toolbar:** transcription status, controls and progress, **Export**, **New recording**, **Settings**. Kept short so the transcription controls have room: the separate-files option is in the settings and Open export folder is in the export result message (EXP-02, EXP-09).
+- **Editing a note:** double-click or right-click → **Edit…** opens one dialog with both the **time** and the **text** (NOTE-06, NOTE-07); the text field wraps long lines instead of scrolling sideways. Right-click → Delete deletes it (NOTE-06a). Recording mode uses the same dialog without the time field.
+- **Settings** are grouped into sections, each briefly explained where needed: Storage, Transcription, Playback (pre-roll, TL-07a), Low-confidence words (threshold, timeline highlight, Markdown marking) and Export.
 - No level meters or mute toggles; the audio devices are not in use. A sound check can be opened on demand (REC-11).
 - **New recording** opens the recording setup (REC-20), which leads to Recording mode.
 
@@ -434,7 +439,7 @@ All data is stored as plain files in the project folder. No database.
         └── 2026-10-02_1400.confidence.json   # per-word confidence export
 ```
 
-- The **base name** (`2026-10-02_1400`) links all files of a recording. Default format `YYYY-MM-DD_HHMM`; imported files keep their original name stem. If the base name is already taken (e.g. two recordings started in the same minute, or an import with the same name stem), a suffix is added: `2026-10-02_1400_2`.
+- The **base name** (`2026-10-02_1400`) links all files of a recording. Default format `YYYY-MM-DD_HHMM`, followed by the optional **recording name** from the setup (`2026-10-02_1400 Weekly sync`, REC-20); characters not allowed in file names, and dots, are left out of the name; imported files keep their original name stem. If the base name is already taken (e.g. two recordings started in the same minute, or an import with the same name stem), a suffix is added: `2026-10-02_1400_2`.
 - The audio file listed as a recording is the one without a secondary suffix (`.mic`, `.system`).
 - JSON files include a `schema_version` field to allow future migrations.
 - During recording, tracks are written as WAV and converted to FLAC when recording ends (or on recovery, REC-12).
@@ -739,13 +744,13 @@ There are currently **no open questions**. New ones are added here as they come 
 | Q27 | How are notes written during Mute all handled? | **Like any other note.** Recording, timestamps and notes continue normally while muted. Mute all only silences the audio; notes are never labelled off the record or excluded from exports, because a user who forgot Mute all on may still be writing notes, which are then the only record of what happened. |
 | Q28 | Can the transcript be edited? | No (TRN-12). Corrections are written as notes. |
 | Q29 | What can be done to notes in Recording mode? | Edit text and delete, with restore of the last deleted note instead of delete confirmations (NOTE-06a). Timestamps are changed in Review mode only (NOTE-07). |
-| Q30 | Where are context texts edited? | In Review mode, and in the recording setup before entering Recording mode, together with the project choice and the sound check (REC-20). Not in Recording mode. |
+| Q30 | Where are context texts edited? | Both in Review mode. The recording context also in the recording setup (REC-20), but not the project context, which belongs to the project rather than the new recording. Not in Recording mode. |
 | Q31 | Can recordings and projects be deleted in the app? | Yes, with confirmation, by moving them to the system trash (PRJ-07). |
 | Q32 | UI language? | English only (§6). |
 | Q33 | Should the app encrypt data? | No (NFR-10). |
 | Q34 | Should Restart ask for confirmation? | Yes (TRN-04). "Restore rather than confirm" only applies during a fast-moving recording session; elsewhere, irreversible actions are confirmed (§6). |
 | Q35 | Can Recording mode and Review mode be open at the same time? | No, one window at a time (§6). |
-| Q36 | Where do exports go? | Always to the project's `exports/` folder, with an "Open export folder" button (EXP-09). |
+| Q36 | Where do exports go? | Always to the project's `exports/` folder; the export result message offers "Open export folder" (EXP-09). |
 | Q37 | What can be undone? | Only deleting a note (NOTE-06a); text edits are corrected by editing again. |
 | Q38 | What happens when the user leaves Recording mode without recording? | No recording is created. Project changes from the setup are kept; the recording context and draft note are kept until the app closes and pre-filled in the next setup (REC-20). |
 | Q39 | How is an accidental End prevented? | With a 5-second **"Ending recording…"** grace period with Cancel in the place of the End button; recording continues meanwhile and is cut at the End point if ending completes (REC-04a). `/end` has no short form. |
@@ -754,5 +759,9 @@ There are currently **no open questions**. New ones are added here as they come 
 | Q42 | Sample rate of the stored audio? | **16 kHz** for now: what Whisper uses, small files, clear enough for speech playback. Revisit only if playback proves too muffled. |
 | Q43 | Which pyannote model version is bundled? | **community-1** (Phase 0): it found the right number of speakers by itself and attributed far more words correctly than 3.1 (§8.4). |
 | Q44 | Default Whisper model, and accuracy vs. speed? | **`large-v3-turbo`** (Phase 0). Accuracy comes first; speed is secondary but not irrelevant, which rules out `large-v3` as the default (about 3× slower on CPU). `large-v3` stays selectable. |
-| Q45 | How is the context text passed to Whisper? | As `hotwords` only, with previous-text conditioning off (CTX-02, Phase 0). |
+| Q45 | How is the context text passed to Whisper? | As `hotwords` only, with previous-text conditioning off (CTX-02, Phase 0), preceded by a short punctuation primer (CTX-02a, first application test). |
 | Q46 | The language list is too long. | About 30 common languages by default, with a "Show all languages" setting (CTX-03a). Choosing one's own favourite languages is not needed yet. |
+| Q47 | Can a recording be given a name when it is created? | Yes, optionally in the recording setup; it becomes part of the base name after the date and time (REC-20, §7.1). Renaming later stays P2 (PRJ-06). |
+| Q48 | How does the user leave Recording mode before recording? | With a **Cancel** button ("Review" suggested moving forward); after End it reads Review (§6.1). |
+| Q49 | How is playback started from the timeline? | From timestamp play buttons only. Clicking the segment text also played it, and its tooltip clashed with the confidence tooltips of the words (TL-03). |
+| Q50 | The first test meeting had the system audio questions and the mic answers clearly separated by track, yet diarization split "Start speaking now!" between two speakers. | Mic-based speaker attribution (TRN-09, P2) would fix such cases; recommended as the next transcription improvement. |

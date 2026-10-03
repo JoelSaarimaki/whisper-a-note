@@ -4,8 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-                               QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QVBoxLayout)
+from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLineEdit, QMessageBox,
+                               QPlainTextEdit, QVBoxLayout)
 
 from ..audio.sources import list_devices
 from ..storage import Project, UnreadableFileError
@@ -21,6 +21,7 @@ PROJECT_SETTING = "__project__"
 @dataclass
 class SetupResult:
     project: Project
+    recording_name: str           # optional; becomes part of the base name (REC-20)
     recording_context: str
     language: str | None          # override; None together with use_project=True = project setting
     use_project_language: bool
@@ -29,14 +30,15 @@ class SetupResult:
 
 
 class RecordingSetupDialog(QDialog):
-    def __init__(self, settings: AppSettings, current: Project | None, recording_context: str = "", parent=None):
+    def __init__(self, settings: AppSettings, current: Project | None, recording_context: str = "",
+                 recording_name: str = "", parent=None):
         super().__init__(parent)
         self.setWindowTitle("New recording — Whisper A Note")
         self.settings = settings
         self.result_value: SetupResult | None = None
         root = Path(settings.projects_folder)
 
-        form = QFormLayout()
+        self.form = form = QFormLayout()
         self.project_combo = QComboBox()
         for folder in sorted((p for p in root.iterdir() if p.is_dir()), key=lambda p: p.name.lower(), reverse=True):
             self.project_combo.addItem(folder.name, str(folder))
@@ -47,22 +49,19 @@ class RecordingSetupDialog(QDialog):
         else:
             self.project_combo.setCurrentIndex(self.project_combo.count() - 1)
         self.new_name = QLineEdit(default_project_name(""))
-        self.new_name.setPlaceholderText("Project name, e.g. 2026-10-02 Customer interview")
+        self.new_name.setPlaceholderText("e.g. 2026-10-02 Customer interview")
         form.addRow("Project", self.project_combo)
-        form.addRow("New project name", self.new_name)
+        form.addRow("Project name", self.new_name)  # shown only for a new project
 
-        self.project_context = QPlainTextEdit()
-        self.project_context.setPlaceholderText("Shared by all recordings of the project: topic, names, terms")
-        self.project_context.setFixedHeight(70)
+        # The project context is edited in Review mode; the setup is about this recording.
+        self.recording_name = QLineEdit(recording_name)
+        self.recording_name.setPlaceholderText("Optional, e.g. Weekly sync")
+        self.recording_name.setToolTip("Added to the file names after the date and time")
         self.recording_context = QPlainTextEdit(recording_context)
-        self.recording_context.setPlaceholderText("This recording only: participants, topics, other notes")
+        self.recording_context.setPlaceholderText("Optional: participants, topics, terms (helps transcription)")
         self.recording_context.setFixedHeight(70)
-        hint = QLabel("Keep the context texts short (about 100 words together): names and terms help most.")
-        hint.setObjectName("hint")
-        hint.setWordWrap(True)
-        form.addRow("Project context", self.project_context)
+        form.addRow("Recording name", self.recording_name)
         form.addRow("Recording context", self.recording_context)
-        form.addRow("", hint)
 
         self.language = QComboBox()
         languages.fill_combo(self.language, [("Use the project setting", PROJECT_SETTING), ("Auto-detect", None)],
@@ -94,27 +93,19 @@ class RecordingSetupDialog(QDialog):
         lay = QVBoxLayout(self)
         lay.addLayout(form)
         lay.addWidget(buttons)
-        self.resize(560, 640)
+        self.resize(560, 0)
         self.project_combo.currentIndexChanged.connect(self._project_changed)
         self._project_changed()
         self._restart_check()
 
     def _project_changed(self) -> None:
-        data = self.project_combo.currentData()
-        self.new_name.setEnabled(data == NEW_PROJECT)
-        if data != NEW_PROJECT:
-            try:
-                self.project_context.setPlainText(Project(Path(data)).settings.context)
-            except UnreadableFileError as e:
-                QMessageBox.warning(self, "Cannot read project", str(e))
-        else:
-            self.project_context.clear()
+        self.form.setRowVisible(self.new_name, self.project_combo.currentData() == NEW_PROJECT)
 
     def _restart_check(self) -> None:
         self.check.restart(self.mic.currentData(), self.system.currentData())
 
     def _confirm(self) -> None:
-        """Project changes are saved when the setup is confirmed (REC-20)."""
+        """A new project is created when the setup is confirmed (REC-20)."""
         data = self.project_combo.currentData()
         try:
             if data == NEW_PROJECT:
@@ -128,15 +119,13 @@ class RecordingSetupDialog(QDialog):
                 project = Project.create(Path(self.settings.projects_folder), name)
             else:
                 project = Project(Path(data))
-            if project.settings.context != self.project_context.toPlainText():
-                project.update(context=self.project_context.toPlainText())
         except (UnreadableFileError, OSError) as e:
             QMessageBox.warning(self, "Cannot save project", str(e))
             return
         lang = self.language.currentData()
         self.check.stop()
         self.result_value = SetupResult(
-            project=project, recording_context=self.recording_context.toPlainText(),
+            project=project, recording_name=self.recording_name.text().strip(), recording_context=self.recording_context.toPlainText(),
             language=None if lang == PROJECT_SETTING else lang, use_project_language=lang == PROJECT_SETTING,
             mic_device=self.mic.currentData(), system_device=self.system.currentData())
         self.accept()

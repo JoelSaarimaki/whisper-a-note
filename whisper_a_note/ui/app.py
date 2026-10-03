@@ -28,7 +28,7 @@ class Controller(QObject):
         self.app = app
         self.settings = AppSettings.load()
         self.jobs: dict[tuple[str, str], TranscriptionJob] = {}
-        self.drafts: dict[str, tuple[str, str]] = {}  # project folder -> (recording context, note draft)
+        self.drafts: dict[str, tuple[str, str, str]] = {}  # project folder -> (context, name, note draft)
         self.review: ReviewWindow | None = None
         self.recording: RecordingWindow | None = None
         self._download_done.connect(self._on_download_done)
@@ -59,7 +59,8 @@ class Controller(QObject):
         if self.recording is not None:
             folder, draft = str(self.recording.project.folder), self.recording.draft()
             if self.recording.state == "ready":  # left without recording: keep context and draft (REC-20)
-                self.drafts[folder] = (self.recording.setup.recording_context, draft)
+                self.drafts[folder] = (self.recording.setup.recording_context, self.recording.setup.recording_name,
+                                       draft)
             else:
                 self.drafts.pop(folder, None)
             self.settings.recording_geometry = bytes(self.recording.saveGeometry().toBase64()).decode()
@@ -80,13 +81,13 @@ class Controller(QObject):
     def new_recording(self) -> None:
         parent = self.recording or self.review
         current = self.recording.project if self.recording else (self.review.project if self.review else None)
-        context, draft = self.drafts.get(str(current.folder), ("", "")) if current else ("", "")
-        dialog = RecordingSetupDialog(self.settings, current, context, parent)
+        context, name, draft = self.drafts.get(str(current.folder), ("", "", "")) if current else ("", "", "")
+        dialog = RecordingSetupDialog(self.settings, current, context, name, parent)
         if dialog.exec() != RecordingSetupDialog.Accepted:
             return
         setup = dialog.result_value
         self.settings.mic_device, self.settings.system_device = setup.mic_device, setup.system_device
-        context, draft = self.drafts.pop(str(setup.project.folder), (setup.recording_context, draft))
+        draft = self.drafts.pop(str(setup.project.folder), ("", "", draft))[2]
         if self.recording is not None:
             self.recording.close()
         if self.review is not None:
@@ -96,6 +97,7 @@ class Controller(QObject):
         self.recording = RecordingWindow(self.settings, setup, draft)
         self.recording.review_requested.connect(
             lambda: self.show_review(self.recording.project, self.recording.base))
+        self.recording.cancel_requested.connect(lambda: self.show_review(self.recording.project))
         self.recording.new_recording_requested.connect(self.new_recording)
         self._restore_geometry(self.recording, self.settings.recording_geometry, (360, 480))
         self.recording.show()

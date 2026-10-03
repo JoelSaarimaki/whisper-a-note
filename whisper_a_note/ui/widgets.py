@@ -1,16 +1,79 @@
-"""Shared widgets: level meters and the on-demand sound check (REC-02, REC-11)."""
+"""Shared widgets: level meters, the on-demand sound check (REC-02, REC-11) and the note editor."""
 from __future__ import annotations
 
+import re
 import threading
 import time
 
 import numpy as np
 from PySide6.QtCore import QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QPainter, QTextCursor
+from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+                               QMessageBox, QPlainTextEdit, QVBoxLayout, QWidget)
 
 from ..audio.sources import DeviceLost, SoundcardSource
 from . import theme
+
+
+def clock(ms: int) -> str:
+    s = ms // 1000
+    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60:02d}:{s % 60:02d}"
+
+
+def parse_clock(text: str) -> int | None:
+    """'mm:ss' or 'h:mm:ss' -> ms."""
+    m = re.fullmatch(r"\s*(?:(\d+):)?(\d{1,2}):(\d{2})\s*", text)
+    if not m:
+        return None
+    h, mi, s = int(m[1] or 0), int(m[2]), int(m[3])
+    return ((h * 60 + mi) * 60 + s) * 1000 if s < 60 and mi < 60 else None
+
+
+class NoteDialog(QDialog):
+    """Edit a note's text, and its time when duration_ms is given (NOTE-06, NOTE-07).
+
+    The text wraps instead of scrolling sideways.
+    """
+
+    def __init__(self, text: str, time_ms: int | None = None, duration_ms: int | None = None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Edit note")
+        self.duration_ms = duration_ms
+        self.text = QPlainTextEdit(text)
+        self.text.setLineWrapMode(QPlainTextEdit.WidgetWidth)
+        self.text.setTabChangesFocus(True)
+        self.time = QLineEdit(clock(time_ms or 0))
+        self.time.setFixedWidth(90)
+        self.time_ms = time_ms
+        form = QFormLayout()
+        if duration_ms is not None:
+            form.addRow("Time", self.time)
+            form.addRow("", QLabel(f"Between 00:00 and {clock(duration_ms)}", objectName="hint"))
+        form.addRow("Text", self.text)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self._save)
+        buttons.rejected.connect(self.reject)
+        lay = QVBoxLayout(self)
+        lay.addLayout(form)
+        lay.addWidget(buttons)
+        self.resize(420, 220)
+        self.text.setFocus()
+        self.text.moveCursor(QTextCursor.End)
+
+    def note_text(self) -> str:
+        return self.text.toPlainText()
+
+    def _save(self) -> None:
+        if self.duration_ms is not None:
+            t = parse_clock(self.time.text())
+            if t is None or t > self.duration_ms:
+                QMessageBox.warning(self, "Timestamp", f"Enter a time between 00:00 and {clock(self.duration_ms)}.")
+                return
+            self.time_ms = t
+        if not self.note_text().strip():
+            QMessageBox.warning(self, "Note text", "The note text cannot be empty. Use Delete to remove a note.")
+            return
+        self.accept()
 
 
 class LevelMeter(QWidget):

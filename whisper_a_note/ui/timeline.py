@@ -2,6 +2,8 @@
 
 Rows run downward in time: Audio (time, markers, mutes) | Transcript | Manual notes.
 A note is shown in the row of the transcript segment that covers its timestamp.
+Playback starts from the timestamp buttons only, so hovering the text shows nothing
+but the confidence of highlighted words.
 """
 from __future__ import annotations
 
@@ -13,7 +15,7 @@ from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QMenu, 
                                QScrollArea, QSlider, QToolTip, QVBoxLayout, QWidget)
 
 from . import theme
-from .recording_window import clock
+from .widgets import clock
 
 
 class Player(QWidget):
@@ -71,19 +73,27 @@ class Player(QWidget):
         self.position_changed.emit(pos)
 
 
-class ClickLabel(QLabel):
-    clicked = Signal()
+class NoteLabel(QLabel):
+    double_clicked = Signal()
 
-    def mousePressEvent(self, e):
+    def mouseDoubleClickEvent(self, e):
         if e.button() == Qt.LeftButton:
-            self.clicked.emit()
-        super().mousePressEvent(e)
+            self.double_clicked.emit()
+        super().mouseDoubleClickEvent(e)
+
+
+def time_button(ms: int, tooltip: str) -> QPushButton:
+    b = QPushButton(f"▶ {clock(ms)}")
+    b.setObjectName("timeButton")
+    b.setCursor(Qt.PointingHandCursor)
+    b.setToolTip(tooltip)
+    return b
 
 
 class Timeline(QScrollArea):
     play_segment = Signal(int, int)     # start, end
     play_note = Signal(int)             # timestamp
-    note_action = Signal(str, str)      # action ("edit", "time", "delete"), note id
+    note_action = Signal(str, str)      # action ("edit", "delete"), note id
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -153,21 +163,21 @@ class Timeline(QScrollArea):
                 grid.addWidget(label, r, 0, 1, 3)
                 r += 1
                 continue
-            time_label = QLabel(clock(t))
-            time_label.setObjectName("muted")
-            row.addWidget(time_label, 0, 0, Qt.AlignTop)
             if kind == "segment":
                 seg, attached = payload
+                play = time_button(t, "Play this segment")
+                play.clicked.connect(lambda _=False, s=seg: self.play_segment.emit(s["start_ms"], s["end_ms"]))
+                row.addWidget(play, 0, 0, Qt.AlignTop)
                 row.addWidget(self._segment_widget(seg, speakers, colors), 0, 1)
                 row.addWidget(self._notes_widget(attached), 0, 2)
                 self.rows.append((seg["start_ms"], seg["end_ms"], frame))
-            else:
+            else:  # the note has its own play button
                 row.addWidget(QWidget(), 0, 1)
                 row.addWidget(self._notes_widget(payload), 0, 2)
                 self.rows.append((t, t + 1000, frame))
             row.setColumnStretch(1, 3)
             row.setColumnStretch(2, 2)
-            row.setColumnMinimumWidth(0, 60)
+            row.setColumnMinimumWidth(0, 70)
             grid.addWidget(frame, r, 0, 1, 3)
             r += 1
         grid.setRowStretch(r, 1)
@@ -186,15 +196,12 @@ class Timeline(QScrollArea):
                              f'<span style="text-decoration: underline dotted;">{text}</span></a>')
             else:
                 parts.append(text)
-        label = ClickLabel(f'<span style="color:{colors.get(seg["speaker"], theme.TEXT)}; font-weight:bold;">'
-                           f'{html.escape(name)}</span><br>' + " ".join(parts))
+        label = QLabel(f'<span style="color:{colors.get(seg["speaker"], theme.TEXT)}; font-weight:bold;">'
+                       f'{html.escape(name)}</span><br>' + " ".join(parts))
         label.setWordWrap(True)
         label.setTextFormat(Qt.RichText)
-        label.setToolTip("Click to play this segment")
         label.linkHovered.connect(lambda href: QToolTip.showText(
-            label.cursor().pos(), f"Confidence {float(href[2:]) * 100:.0f}%") if href else None)
-        label.linkActivated.connect(lambda _: self.play_segment.emit(seg["start_ms"], seg["end_ms"]))
-        label.clicked.connect(lambda: self.play_segment.emit(seg["start_ms"], seg["end_ms"]))
+            label.cursor().pos(), f"Confidence {float(href[2:]) * 100:.0f}%") if href else QToolTip.hideText())
         return label
 
     def _notes_widget(self, notes) -> QWidget:
@@ -202,21 +209,29 @@ class Timeline(QScrollArea):
         lay = QVBoxLayout(box)
         lay.setContentsMargins(0, 0, 0, 0)
         for n in notes:
-            label = ClickLabel(f"<b>{clock(n.time_ms)}</b> {html.escape(n.text)}")
+            frame = QFrame()
+            frame.setObjectName("note")
+            frame.setStyleSheet(f"QFrame#note {{ background: {theme.PANEL}; border-left: 3px solid {theme.ACCENT}; }}"
+                                f"QFrame#note QLabel {{ background: transparent; }}")
+            row = QHBoxLayout(frame)
+            row.setContentsMargins(2, 3, 3, 3)
+            play = time_button(n.time_ms, "Play from this note")
+            play.clicked.connect(lambda _=False, t=n.time_ms: self.play_note.emit(t))
+            label = NoteLabel(html.escape(n.text))
             label.setWordWrap(True)
-            label.setStyleSheet(f"background: {theme.PANEL}; border-left: 3px solid {theme.ACCENT}; padding: 3px;")
-            label.setToolTip("Click to play from this note · right-click to edit")
-            label.clicked.connect(lambda t=n.time_ms: self.play_note.emit(t))
-            label.setContextMenuPolicy(Qt.CustomContextMenu)
-            label.customContextMenuRequested.connect(lambda pos, n=n, lbl=label: self._note_menu(n, lbl, pos))
-            lay.addWidget(label)
+            label.setToolTip("Double-click or right-click to edit")
+            label.double_clicked.connect(lambda n=n: self.note_action.emit("edit", n.id))
+            frame.setContextMenuPolicy(Qt.CustomContextMenu)
+            frame.customContextMenuRequested.connect(lambda pos, n=n, f=frame: self._note_menu(n, f, pos))
+            row.addWidget(play, 0, Qt.AlignTop)
+            row.addWidget(label, 1)
+            lay.addWidget(frame)
         lay.addStretch()
         return box
 
     def _note_menu(self, note, label, pos) -> None:
         menu = QMenu(self)
-        menu.addAction("Edit text", lambda: self.note_action.emit("edit", note.id))
-        menu.addAction("Change time…", lambda: self.note_action.emit("time", note.id))
+        menu.addAction("Edit…", lambda: self.note_action.emit("edit", note.id))
         menu.addAction("Delete", lambda: self.note_action.emit("delete", note.id))
         menu.exec(label.mapToGlobal(pos))
 

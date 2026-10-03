@@ -9,7 +9,7 @@ from pathlib import Path
 import soundfile as sf
 from faster_whisper import decode_audio
 
-src = Path("audio_test_files_finnish")
+src = Path("test_cases/audio_test_files_finnish")
 out = Path("spikes/test_audio")
 name = "kuulumiset"
 audio = decode_audio(str(src / "kuulumiset_testi.mp3"), sampling_rate=16000)

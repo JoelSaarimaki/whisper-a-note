@@ -9,6 +9,12 @@ def test_chunks_group_speech_and_cut_in_pauses():
     assert all(c.end_ms - c.start_ms <= 60_000 for c in chunks)
 
 
+def test_hotwords_always_start_with_the_punctuation_primer():
+    from whisper_a_note.transcription.worker import PUNCTUATION_PRIMER, hotwords
+    assert hotwords("") == hotwords(None) == PUNCTUATION_PRIMER
+    assert hotwords(" Anna, Joel ") == f"{PUNCTUATION_PRIMER} Anna, Joel"
+
+
 def test_chunks_skip_fully_muted_intervals():
     chunks = plan_chunks([(0, 30000)], 30_000, muted_all=[(10_000, 20_000)])
     assert chunks == [Chunk(0, 10_000), Chunk(20_000, 30_000)]

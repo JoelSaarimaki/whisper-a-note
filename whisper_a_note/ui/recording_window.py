@@ -6,7 +6,7 @@ import threading
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
-from PySide6.QtWidgets import (QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget,
+from PySide6.QtWidgets import (QHBoxLayout, QLabel, QLineEdit, QListWidget,
                                QListWidgetItem, QMenu, QMessageBox, QPushButton, QVBoxLayout, QWidget)
 
 from ..audio.recorder import Recorder
@@ -14,19 +14,15 @@ from ..audio.sources import SoundcardSource
 from ..storage import NotesFile
 from .settings import AppSettings
 from .setup_dialog import SetupResult
-from .widgets import LevelMeter, SoundCheck
+from .widgets import LevelMeter, NoteDialog, SoundCheck, clock
 
 GRACE_S = 5          # REC-04a
 LOW_DISK_BYTES = 1 << 30  # REC-18
 
 
-def clock(ms: int) -> str:
-    s = ms // 1000
-    return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}" if s >= 3600 else f"{s // 60:02d}:{s % 60:02d}"
-
-
 class RecordingWindow(QWidget):
     review_requested = Signal()
+    cancel_requested = Signal()    # left before Start: nothing is recorded (REC-20)
     new_recording_requested = Signal()
     _finished = Signal(int, str)  # duration, error
 
@@ -81,8 +77,9 @@ class RecordingWindow(QWidget):
         self.mute_all.setObjectName("muteAll")
         self.mute_all.setCheckable(True)
         self.mute_all.toggled.connect(lambda on: self._set_mute("all", on))
-        self.review = QPushButton("Review")
-        self.review.clicked.connect(self.review_requested.emit)
+        self.review = QPushButton("Cancel")  # "Review" once a recording has ended
+        self.review.clicked.connect(
+            lambda: (self.cancel_requested if self.state == "ready" else self.review_requested).emit())
         self.meters, self.mute_buttons = {}, {}
         rows = []
         for kind, label in (("mic", "MIC"), ("system", "SYS")):
@@ -150,7 +147,7 @@ class RecordingWindow(QWidget):
         self.check.stop()
         # recording.json language: null = project setting, "auto" = auto-detect, else a code
         language = None if self.setup.use_project_language else (self.setup.language or "auto")
-        self.base = self.project.new_base_name()
+        self.base = self.project.new_base_name(title=self.setup.recording_name)
         self.recorder = Recorder(
             self.project, self.base,
             SoundcardSource(self.setup.mic_device, loopback=False),
@@ -261,6 +258,7 @@ class RecordingWindow(QWidget):
             self.mute_all.toggle()
         else:
             self.hint.setText(f"Unknown or unavailable command: {cmd}")
+            self.hint.show()
 
     def _refresh_notes(self) -> None:
         self.history.clear()
@@ -289,8 +287,11 @@ class RecordingWindow(QWidget):
 
     def _edit(self, note_id: str) -> None:
         note = self.notes.get(note_id)
-        text, ok = QInputDialog.getMultiLineText(self, "Edit note", "Note text:", note.text)
-        if ok and text.strip() and text != note.text:
+        dialog = NoteDialog(note.text, parent=self)
+        if not dialog.exec():
+            return
+        text = dialog.note_text()
+        if text != note.text:
             self.notes.edit_text(note_id, text)
             if note_id == self.closing_id:
                 self.input.setText(text)
@@ -343,6 +344,7 @@ class RecordingWindow(QWidget):
         self.start_end.style().unpolish(self.start_end)
         self.start_end.style().polish(self.start_end)
         self.review.setEnabled(s in ("ready", "ended"))
+        self.review.setText("Cancel" if s == "ready" else "Review")
         self.mute_all.setEnabled(s in ("ready", "recording", "ending"))
         for b in self.mute_buttons.values():
             b.setEnabled(s in ("ready", "recording", "ending"))
@@ -351,9 +353,9 @@ class RecordingWindow(QWidget):
             "recording": "",
             "ending": f"Ending recording… {self.countdown} s. Press Cancel to keep recording.",
             "saving": "Saving the recording…",
-            "ended": "Recording ended. Enter adds or updates one closing note at the end; "
-                     "other notes can be added in Review mode.",
+            "ended": "",
         }[s])
+        self.hint.setVisible(bool(self.hint.text()))
         if s == "ended":
             self.elapsed.setText(clock(self.duration_ms or 0))
             for m in self.meters.values():

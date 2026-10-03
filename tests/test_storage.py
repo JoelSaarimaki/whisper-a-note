@@ -172,3 +172,12 @@ def test_new_base_name_adds_suffix_when_taken(tmp_path):
     assert project.new_base_name(t) == "2026-10-02_1400_2"
     (project.folder / "2026-10-02_1400_2.mic.wav").write_bytes(b"")
     assert project.new_base_name(t) == "2026-10-02_1400_3"
+
+
+def test_new_base_name_with_recording_name(tmp_path):
+    project = Project.create(tmp_path, "p")
+    t = datetime(2026, 10, 2, 14, 0)
+    assert project.new_base_name(t, title="Weekly sync") == "2026-10-02_1400 Weekly sync"
+    # characters not allowed in file names, and dots (secondary suffixes), are removed
+    assert project.new_base_name(t, title=' Q&A: v1.2 / "draft"? ') == "2026-10-02_1400 Q&A v1 2 draft"
+    assert project.new_base_name(t, title="  ") == "2026-10-02_1400"

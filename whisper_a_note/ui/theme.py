@@ -34,6 +34,13 @@ QLabel#banner {{ background: {WARN}; color: #000; font-weight: bold; padding: 4p
 QLabel#error {{ background: {DANGER}; color: #fff; padding: 4px; border-radius: 4px; }}
 QLabel#hint {{ color: {MUTED_TEXT}; font-style: italic; }}
 QScrollArea, QSplitter {{ border: none; }}
+QGroupBox {{ border: 1px solid {BORDER}; border-radius: 4px; margin-top: 14px; padding: 8px 6px 4px 6px;
+            font-weight: bold; }}
+QGroupBox::title {{ subcontrol-origin: margin; left: 8px; padding: 0 4px; }}
+QGroupBox QLabel, QGroupBox QCheckBox {{ font-weight: normal; }}
+QPushButton#timeButton {{ background: transparent; border: none; color: {MUTED_TEXT}; padding: 0 4px;
+                          text-align: left; }}
+QPushButton#timeButton:hover {{ color: {ACCENT}; }}
 QToolTip {{ background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER}; }}
 QProgressBar {{ background: {INPUT}; border: 1px solid {BORDER}; border-radius: 4px; text-align: center; }}
 QProgressBar::chunk {{ background: {ACCENT}; border-radius: 3px; }}

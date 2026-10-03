@@ -1,6 +1,7 @@
 """A project folder and its recordings (SPEC §5.1, §7.1)."""
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,15 @@ class ProjectSettings:
 def default_project_name(title: str, today: datetime | None = None) -> str:
     """PRJ-02 default: `YYYY-MM-DD <title>`."""
     return f"{(today or datetime.now()):%Y-%m-%d} {title}".strip()
+
+
+def safe_file_name(text: str, limit: int = 60) -> str:
+    """A user-given name usable in file names on all systems.
+
+    Dots are removed too, as the base name must not look like it had a secondary suffix.
+    """
+    text = re.sub(r'[<>:"/\\|?*.\x00-\x1f]', " ", text)
+    return " ".join(text.split())[:limit].strip()
 
 
 class Project:
@@ -86,9 +96,9 @@ class Project:
                 names.add(p.name[: -len(".recording.json")])
         return sorted(names)
 
-    def new_base_name(self, started: datetime | None = None, stem: str | None = None) -> str:
-        """`YYYY-MM-DD_HHMM` (or an imported file's stem), with `_2`, `_3`… if taken."""
-        base = stem or f"{(started or datetime.now()):%Y-%m-%d_%H%M}"
+    def new_base_name(self, started: datetime | None = None, stem: str | None = None, title: str = "") -> str:
+        """`YYYY-MM-DD_HHMM [title]` (or an imported file's stem), with `_2`, `_3`… if taken."""
+        base = stem or f"{(started or datetime.now()):%Y-%m-%d_%H%M} {safe_file_name(title)}".strip()
         candidate, n = base, 2
         while self._taken(candidate):
             candidate, n = f"{base}_{n}", n + 1

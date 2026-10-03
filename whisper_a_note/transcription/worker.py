@@ -13,6 +13,16 @@ from importlib import resources
 RATE = 16000
 PYANNOTE_PIPELINE = "speaker-diarization-community-1"
 
+# Without a punctuated prompt, Whisper sometimes writes a whole window in lower case without
+# punctuation. This short sentence fixed that in the first English test meeting and did not
+# change the language or harm the Finnish test recording (CTX-02a).
+PUNCTUATION_PRIMER = "Hello, everyone. Let's begin."
+
+
+def hotwords(context: str | None) -> str:
+    """The primer, followed by the context (names and terms)."""
+    return f"{PUNCTUATION_PRIMER} {context.strip()}" if context and context.strip() else PUNCTUATION_PRIMER
+
 
 def _offline() -> None:
     os.environ["HF_HUB_OFFLINE"] = "1"  # NFR-01: libraries must not contact servers
@@ -45,7 +55,7 @@ def whisper_worker(audio_path: str, chunks: list[tuple[int, int]] | None, first_
             segments, info = model.transcribe(
                 audio[a * RATE // 1000: b * RATE // 1000], language=language, vad_filter=True,
                 word_timestamps=True, condition_on_previous_text=False,  # CTX-02
-                hotwords=settings.get("context_used") or None)
+                hotwords=hotwords(settings.get("context_used")))
             words = [{"w": w.word.strip(), "start_ms": a + int(w.start * 1000),
                       "end_ms": a + int(w.end * 1000), "conf": round(w.probability, 3)}
                      for s in segments for w in (s.words or []) if w.word.strip()]

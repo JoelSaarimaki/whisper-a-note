@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox,
-                               QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-                               QVBoxLayout, QWidget)
+                               QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
+                               QPushButton, QVBoxLayout, QWidget)
 
 from .. import paths
 from ..transcription import models
@@ -17,12 +17,26 @@ MODEL_NOTES = {
 }
 
 
+def section(title: str, explanation: str = "") -> tuple[QGroupBox, QFormLayout]:
+    """A titled group of settings, optionally explained in one short text above them."""
+    box = QGroupBox(title)
+    lay = QVBoxLayout(box)
+    if explanation:
+        label = QLabel(explanation)
+        label.setObjectName("hint")
+        label.setWordWrap(True)
+        lay.addWidget(label)
+    form = QFormLayout()
+    lay.addLayout(form)
+    return box, form
+
+
 class SettingsDialog(QDialog):
     def __init__(self, settings: AppSettings, download, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Settings — Whisper A Note")
         self.settings, self.download = settings, download
-        form = QFormLayout()
+        storage, form = section("Storage")
 
         self.folder = QLineEdit(settings.projects_folder or "")
         browse = QPushButton("Browse…")
@@ -33,6 +47,8 @@ class SettingsDialog(QDialog):
         box = QWidget()
         box.setLayout(row)
         form.addRow("Projects folder", box)
+
+        transcription, form = section("Transcription")
 
         self.model = QComboBox()
         for name in models.MODELS:
@@ -50,12 +66,20 @@ class SettingsDialog(QDialog):
         mbox.setLayout(mrow)
         form.addRow("Whisper model", self.model)
         form.addRow("", mbox)
+        self.all_languages = QCheckBox("Show all languages (otherwise only about 30 common ones)")
+        self.all_languages.setChecked(settings.show_all_languages)
+        form.addRow("Language lists", self.all_languages)
 
+        playback, form = section("Playback", "Pre-roll: playback from a transcript segment or a note starts "
+                                 "this much earlier, so you hear what led up to it. Notes are usually written "
+                                 "after the speech they refer to, so they get a longer pre-roll.")
         self.pre_seg = QDoubleSpinBox(minimum=0, maximum=30, singleStep=0.5, value=settings.preroll_segment_s, suffix=" s")
         self.pre_note = QDoubleSpinBox(minimum=0, maximum=60, singleStep=0.5, value=settings.preroll_note_s, suffix=" s")
         form.addRow("Pre-roll for segments", self.pre_seg)
         form.addRow("Pre-roll for notes", self.pre_note)
 
+        confidence, form = section("Low-confidence words", "Words the transcription is less sure about than "
+                                   "the threshold are marked, so you know what to check by listening.")
         self.threshold = QDoubleSpinBox(minimum=1, maximum=99, singleStep=5, decimals=0,
                                         value=settings.confidence_threshold * 100, suffix=" %")
         self.highlight = QCheckBox("Highlight low-confidence words in the timeline")
@@ -64,22 +88,24 @@ class SettingsDialog(QDialog):
         for key, label in (("italic", "Italic (default)"), ("code", "Code (backticks)"), ("off", "Off")):
             self.marker.addItem(label, key)
         self.marker.setCurrentIndex(max(0, self.marker.findData(settings.export_marker)))
-        form.addRow("Low-confidence threshold", self.threshold)
+        form.addRow("Threshold", self.threshold)
         form.addRow("", self.highlight)
-        form.addRow("Marking in Markdown export", self.marker)
+        form.addRow("Marking in Markdown", self.marker)
 
-        self.all_languages = QCheckBox("Show all languages (otherwise only about 30 common ones)")
-        self.all_languages.setChecked(settings.show_all_languages)
-        form.addRow("Language lists", self.all_languages)
+        export, form = section("Export")
+        self.separate = QCheckBox("Separate files for transcript, notes and context")
+        self.separate.setChecked(settings.export_separate)
+        form.addRow(self.separate)
 
         buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         lay = QVBoxLayout(self)
-        lay.addLayout(form)
+        for box in (storage, transcription, playback, confidence, export):
+            lay.addWidget(box)
         lay.addWidget(buttons)
         self.refresh_model_state()
-        self.resize(560, 0)
+        self.resize(600, lay.totalHeightForWidth(600))  # room for the wrapped explanations
 
     def refresh_model_state(self) -> None:
         ok = models.is_available(self.model.currentData(), paths.whisper_models_dir())
@@ -100,5 +126,6 @@ class SettingsDialog(QDialog):
         s.highlight_low_confidence = self.highlight.isChecked()
         s.export_marker = self.marker.currentData()
         s.show_all_languages = self.all_languages.isChecked()
+        s.export_separate = self.separate.isChecked()
         s.save()
         self.accept()

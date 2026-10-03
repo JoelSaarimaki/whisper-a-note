@@ -1,14 +1,13 @@
 """Review mode: projects, recordings, context, transcription, timeline and export (SPEC §6.2)."""
 from __future__ import annotations
 
-import re
 import threading
 import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QKeySequence, QShortcut
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QLabel,
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
                                QPlainTextEdit, QProgressBar, QPushButton, QSplitter, QVBoxLayout, QWidget)
 
@@ -21,22 +20,13 @@ from ..storage.project import default_project_name
 from ..transcription import models
 from ..transcription.job import TranscriptionJob, combined_context
 from . import languages
-from .recording_window import clock
 from .timeline import Player, Timeline
+from .widgets import NoteDialog, clock, parse_clock
 
 # Phase 0 speeds (share of audio length) on a fast laptop, made conservative (TRN-07a).
 DEFAULT_RTF = {"large-v3-turbo": 0.26, "large-v3": 0.98, "medium": 0.55, "small": 0.24}
 DIARIZE_RTF = 0.32
 CONSERVATIVE = 1.6
-
-
-def parse_clock(text: str) -> int | None:
-    """'mm:ss' or 'h:mm:ss' -> ms."""
-    m = re.fullmatch(r"\s*(?:(\d+):)?(\d{1,2}):(\d{2})\s*", text)
-    if not m:
-        return None
-    h, mi, s = int(m[1] or 0), int(m[2]), int(m[3])
-    return ((h * 60 + mi) * 60 + s) * 1000 if s < 60 and mi < 60 else None
 
 
 class ReviewWindow(QMainWindow):
@@ -79,6 +69,7 @@ class ReviewWindow(QMainWindow):
         ctx_hint.setWordWrap(True)
 
         side = QWidget()
+        side.setMinimumWidth(260)
         sl = QVBoxLayout(side)
         sl.addWidget(QLabel("<b>Project</b>"))
         sl.addWidget(self.project_combo)
@@ -108,17 +99,15 @@ class ReviewWindow(QMainWindow):
             b.clicked.connect(getattr(self, f"_trn_{key}"))
             self.btn[key] = b
         self.btn["start"].setObjectName("primary")
-        self.separate = QCheckBox("Separate files")
         export_btn = QPushButton("Export")
+        export_btn.setToolTip("Write Markdown and confidence JSON to the project's exports folder")
         export_btn.clicked.connect(self._export)
-        folder_btn = QPushButton("Open export folder")
-        folder_btn.clicked.connect(self._open_exports)
         new_rec = QPushButton("● New recording")
         new_rec.setObjectName("danger")
         new_rec.clicked.connect(self.new_recording_requested.emit)
         settings_btn = QPushButton("Settings")
         settings_btn.clicked.connect(self.settings_requested.emit)
-        self.export_widgets = [export_btn, folder_btn, self.separate]
+        self.export_widgets = [export_btn]
 
         bar = QHBoxLayout()
         bar.addWidget(self.trn_status)
@@ -126,9 +115,7 @@ class ReviewWindow(QMainWindow):
         for b in self.btn.values():
             bar.addWidget(b)
         bar.addStretch()
-        bar.addWidget(self.separate)
         bar.addWidget(export_btn)
-        bar.addWidget(folder_btn)
         bar.addWidget(new_rec)
         bar.addWidget(settings_btn)
 
@@ -176,6 +163,9 @@ class ReviewWindow(QMainWindow):
         split.addWidget(side)
         split.addWidget(main)
         split.setSizes([300, 900])
+        split.setStretchFactor(0, 0)  # the sidebar keeps its width when the window is resized
+        split.setStretchFactor(1, 1)
+        split.setCollapsible(0, False)
         self.setCentralWidget(split)
         self.resize(1250, 800)
 
@@ -551,20 +541,14 @@ class ReviewWindow(QMainWindow):
 
     def _note_action(self, action: str, note_id: str) -> None:
         note = self.notes.get(note_id)
-        if action == "edit":
-            text, ok = QInputDialog.getMultiLineText(self, "Edit note", "Note text:", note.text)
-            if ok and text.strip():
-                self.notes.edit_text(note_id, text)
-        elif action == "time":
-            duration = self._duration() or 0
-            text, ok = QInputDialog.getText(self, "Change time", f"Time (00:00 – {clock(duration)}):",
-                                            text=clock(note.time_ms))
-            t = parse_clock(text) if ok else None
-            if ok and (t is None or t > duration):
-                QMessageBox.warning(self, "Timestamp", f"Enter a time between 00:00 and {clock(duration)}.")
+        if action == "edit":  # time and text in one dialog
+            dialog = NoteDialog(note.text, note.time_ms, self._duration() or 0, self)
+            if not dialog.exec():
                 return
-            if t is not None:
-                self.notes.set_time(note_id, t)
+            if dialog.note_text() != note.text:
+                self.notes.edit_text(note_id, dialog.note_text())
+            if dialog.time_ms != note.time_ms:
+                self.notes.set_time(note_id, dialog.time_ms)
         elif action == "delete":  # no confirmation; restore instead (NOTE-06a)
             self.notes.delete(note_id)
             self.undo.show()
@@ -581,11 +565,18 @@ class ReviewWindow(QMainWindow):
         self._save_contexts()
         try:
             files = RecordingExport(self.project, self.base, self.settings.export_marker,
-                                    self.settings.confidence_threshold).write(separate=self.separate.isChecked())
+                                    self.settings.confidence_threshold).write(separate=self.settings.export_separate)
         except (UnreadableFileError, OSError) as e:
             QMessageBox.warning(self, "Export failed", str(e))
             return
-        QMessageBox.information(self, "Exported", "Written to the exports folder:\n" + "\n".join(f.name for f in files))
+        box = QMessageBox(QMessageBox.Information, "Exported",
+                          "Written to the exports folder:\n" + "\n".join(f.name for f in files), parent=self)
+        open_btn = box.addButton("Open export folder", QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Ok)
+        box.setDefaultButton(QMessageBox.Ok)
+        box.exec()
+        if box.clickedButton() is open_btn:
+            self._open_exports()
 
     def _open_exports(self) -> None:
         folder = self.project.folder / "exports"

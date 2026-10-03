@@ -23,6 +23,7 @@ def app(tmp_path, monkeypatch):
     monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: None)
     monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: pytest.fail(f"warning shown: {a[1:]}"))
     monkeypatch.setattr(QMessageBox, "critical", lambda *a, **k: pytest.fail(f"error shown: {a[1:]}"))
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.Ok)  # e.g. the export result
     import whisper_a_note.ui.recording_window as rw
     import whisper_a_note.ui.widgets as widgets
     monkeypatch.setattr(widgets, "SoundcardSource", lambda name, loopback: FakeSource("Loopback" if loopback else "Mic"))
@@ -72,6 +73,22 @@ def test_review_mode_notes_and_export(app, tmp_path):
     review._note_action("delete", review.notes.notes[0].id)
     review._restore()
     assert len(review.notes.notes) == 2
+    from whisper_a_note.ui import review_window
+
+    class FakeDialog:  # time and text are edited in one dialog
+        def __init__(self, text, time_ms, duration_ms, parent):
+            self.time_ms = 4000
+        def exec(self):
+            return True
+        def note_text(self):
+            return "First note, edited"
+    real = review_window.NoteDialog
+    review_window.NoteDialog = FakeDialog
+    try:
+        review._note_action("edit", review.notes.notes[0].id)
+    finally:
+        review_window.NoteDialog = real
+    assert (review.notes.notes[0].text, review.notes.notes[0].time_ms) == ("First note, edited", 4000)
     review.recording_context.setPlainText("Participants: Anna, Joel")
     review._save_contexts()
     assert RecordingFile(project.path(base, "recording.json")).meta.context == "Participants: Anna, Joel"
@@ -86,11 +103,13 @@ def test_recording_mode_session(app, tmp_path):
     from whisper_a_note.ui.settings import AppSettings
     from whisper_a_note.ui.setup_dialog import SetupResult
     project = Project.create(tmp_path, "p")
-    setup = SetupResult(project, "Participants: Anna", None, True, None, None)
+    setup = SetupResult(project, "Weekly sync", "Participants: Anna", None, True, None, None)
     win = RecordingWindow(AppSettings(projects_folder=str(tmp_path)), setup, draft="pre-written")
     win.input.returnPressed.emit()  # before Start: stays as a draft (NOTE-02a)
     assert win.input.text() == "pre-written" and win.notes is None
+    assert win.review.text() == "Cancel"  # nothing recorded yet: leaving is cancelling
     win.start()
+    assert win.base.endswith(" Weekly sync")
     pump(app, 0.6)
     win.input.returnPressed.emit()  # the draft is submitted after Start
     assert [n.text for n in win.notes.notes] == ["pre-written"] and win.input.text() == ""
@@ -110,6 +129,7 @@ def test_recording_mode_session(app, tmp_path):
     while win.state != "ended" and time.time() < deadline:
         pump(app, 0.1)
     assert win.state == "ended" and win.duration_ms > 800
+    assert win.review.text() == "Review" and not win.hint.isVisibleTo(win)
     win.input.setText("Closing thought")
     win.input.returnPressed.emit()
     win.input.setText("Closing thought, refined")
@@ -122,6 +142,26 @@ def test_recording_mode_session(app, tmp_path):
     meta = RecordingFile(project.path(win.base, "recording.json")).meta
     assert meta.context == "Participants: Anna" and any(m.source == "all" for m in meta.mutes)
     win.close()
+
+
+def test_setup_and_settings_dialogs(app, tmp_path, monkeypatch):
+    import whisper_a_note.ui.setup_dialog as sd
+    from whisper_a_note.ui.settings import AppSettings
+    from whisper_a_note.ui.settings_dialog import SettingsDialog
+    monkeypatch.setattr(sd, "list_devices", lambda: {"mic": [], "system": []})
+    project = Project.create(tmp_path, "p")
+    settings = AppSettings(projects_folder=str(tmp_path))
+    dialog = sd.RecordingSetupDialog(settings, project, "ctx", "Weekly sync")
+    assert not dialog.form.isRowVisible(dialog.new_name)  # project name only for a new project
+    dialog.project_combo.setCurrentIndex(dialog.project_combo.findData(sd.NEW_PROJECT))
+    assert dialog.form.isRowVisible(dialog.new_name)
+    dialog.project_combo.setCurrentIndex(dialog.project_combo.findData(str(project.folder)))
+    dialog._confirm()
+    assert dialog.result_value.recording_name == "Weekly sync" and dialog.result_value.recording_context == "ctx"
+    settings_dialog = SettingsDialog(settings, lambda *a: None)
+    settings_dialog.separate.setChecked(True)
+    settings_dialog._save()
+    assert AppSettings.load().export_separate
 
 
 def test_language_lists_common_or_all(app):
